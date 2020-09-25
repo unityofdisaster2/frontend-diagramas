@@ -1,0 +1,41 @@
+.paper-container {
+    position: absolute;
+    height: 100%;
+    overflow: hidden;
+    top: 50px;  /* space for toolbar */
+    left: 406px; /* space for stencil */
+    right: 240px; /* space for inspector */
+}
+
+.inspector-container {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 240px;
+}
+
+/*  Stencil  */
+.stencil-container {
+    position: absolute;
+    left: 205px;
+    top: 0;
+    bottom: 0;
+    width: 200px;
+}
+
+.stencil-db {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 200px;
+}
+
+/*  Toolbar  */
+.toolbar-container {
+    position: absolute;
+    height: 50px;
+    left: 406px; /* space for stencil */
+    right: 0;
+}

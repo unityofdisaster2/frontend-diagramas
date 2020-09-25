@@ -1,1 +1,13 @@
-/* You can add global styles to this file, and also import other style files */
+@import "~@clientio/rappid/rappid.css";
+
+/*
+body {
+  height: 100vh;
+  box-sizing: border-box;
+  margin: 0;
+}*/
+
+html, body {
+  margin: 0;
+  padding: 0;
+}

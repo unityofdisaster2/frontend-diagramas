@@ -66,7 +66,8 @@
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "browserTarget": "rappid-angular:build"
+            "browserTarget": "rappid-angular:build",
+            "proxyConfig": "src/proxy.conf.json"
           },
           "configurations": {
             "production": {
@@ -123,6 +124,10 @@
           }
         }
       }
-    }},
-  "defaultProject": "rappid-angular"
+    }
+  },
+  "defaultProject": "rappid-angular",
+  "cli": {
+    "analytics": "31c3f079-94a8-449a-80b0-05ece78b63bf"
+  }
 }

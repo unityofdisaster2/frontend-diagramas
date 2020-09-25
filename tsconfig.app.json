@@ -6,7 +6,9 @@
   },
   "files": [
     "src/main.ts",
-    "src/polyfills.ts"
+    "src/polyfills.ts",
+    "node_modules/@clientio/rappid/index.ts",
+    "vendor/index.ts"    
   ],
   "include": [
     "src/**/*.d.ts"
