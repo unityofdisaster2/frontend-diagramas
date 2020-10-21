@@ -11,10 +11,12 @@
     "moduleResolution": "node",
     "importHelpers": true,
     "skipLibCheck": true,
-    "target": "es2015",
+    //"target": "es2015",
+    "target": "es6",
     "lib": [
-      "es2018",
-      "dom"
+      "es2019",
+      "dom",
+      "DOM.Iterable"
     ]
   },
   "angularCompilerOptions": {

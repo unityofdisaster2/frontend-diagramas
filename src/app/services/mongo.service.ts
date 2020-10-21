@@ -9,8 +9,9 @@ export class MongoService {
 
   constructor(private http: HttpClient) { }
 
-  getQuery(query: string){
-    const url = `http://localhost:3000/api/${query}`;
+
+  getRegistros() {
+    const url = 'http://localhost:3000/api/registros';
     return this.http.get(url,
       {
         headers: new HttpHeaders({
@@ -19,13 +20,13 @@ export class MongoService {
       });
   }
 
-  insertGraph(grafo: JSON){
-    const url = `localhost:3000/persona`;
-    this.http.post(url, grafo,
-      {
-        headers: new HttpHeaders({
-          'Content-Type': 'application/json'
-        })
-      });
+  insertGraph(grafo: JSON, image: any) {
+    const url = 'http://localhost:3000/api/insertGraph';
+    const auxJson = {
+      grafo: grafo,
+      image: image,
+    };
+
+    return this.http.post<any>(url, auxJson);
   }
 }
