@@ -4,8 +4,9 @@ import { MongoService } from './services/mongo.service';
 import { RappidOPMUtils } from './utils/rappid-opm-utils';
 import { saveAs } from 'file-saver';
 import * as alertify from 'alertifyjs';
-import { HttpClient } from '@angular/common/http';
-import { opm } from './utils/custom-shapes';
+import { opm, shapeConfig } from './utils/custom-shapes';
+import { DialogoComponent } from './components/dialogo/dialogo.component';
+import { MatDialog } from '@angular/material/dialog';
 
 @Component({
   selector: 'app-root',
@@ -20,6 +21,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   @ViewChild('stencilDB') stencilDBContainer: ElementRef;
   @ViewChild('toolbarContainer') toolbarContainer: ElementRef;
 
+
   // declaracion de componentes de la clase
   private graph: dia.Graph;
   private graphStructure: object;
@@ -33,7 +35,43 @@ export class AppComponent implements OnInit, AfterViewInit {
   private objectMaps: any;
   private globalInspector: ui.Inspector;
 
-  constructor(private mongo: MongoService, private http: HttpClient) { }
+  constructor(private mongo: MongoService, public dialog: MatDialog) { }
+
+  openMatDialog(elemento: dia.ElementView) {
+    const dialogRef = this.dialog.open(DialogoComponent);
+    dialogRef.componentInstance.parentCOM.subscribe(() => {
+      let port: {};
+      if (dialogRef.componentInstance.tipo === '0') {
+        //input
+        port = {
+          group: 'in',
+          attrs: {
+            '.port-body': {
+              magnet: 'passive'
+            },
+            text: {
+              text: dialogRef.componentInstance.nombre
+            }
+          },
+        };
+      } else if (dialogRef.componentInstance.tipo === '1') {
+        port = {
+          group: 'out',
+          attrs: {
+            text: {
+              text: dialogRef.componentInstance.nombre
+            }
+          }
+        };
+      }
+
+
+      elemento.model.addPort(port);
+      if (dialogRef.componentInstance.closed) {
+        dialogRef.close();
+      }
+    });
+  }
 
 
 
@@ -41,6 +79,7 @@ export class AppComponent implements OnInit, AfterViewInit {
 
     //objeto que contiene todas las definiciones de OPM
     const aux = new RappidOPMUtils();
+
 
 
     // tema de rappid
@@ -77,9 +116,7 @@ export class AppComponent implements OnInit, AfterViewInit {
 
     // una clase que tenga como parametro la misma clase o en este caso 
     // una interfaz que tenga como parametro su propio tipo
-    let algo: GraphStructure;
 
-    algo.root = graph;
 
 
 
@@ -111,6 +148,8 @@ export class AppComponent implements OnInit, AfterViewInit {
       cellViewNamespace: { opm, shapes }
     });
 
+
+
     // objeto que permite seleccionar elementos de maneras personalizadas
     const selection = new ui.Selection({
       paper,
@@ -135,7 +174,6 @@ export class AppComponent implements OnInit, AfterViewInit {
         // al activarse este evento se esconden las toolViews de los links que 
         // se encuentran activas
         paper.hideTools();
-        console.log(graph);
         if (this.globalInspector) {
           this.globalInspector.remove();
         }
@@ -143,9 +181,6 @@ export class AppComponent implements OnInit, AfterViewInit {
         // si se presiona en cualquier parte del lienzo que no sea un elemento
         // del diagrama se desactiva el estado
         celda = null;
-      },
-      'blank:pointerup': (evt, x, y) => {
-
       },
 
 
@@ -189,7 +224,6 @@ export class AppComponent implements OnInit, AfterViewInit {
       },
 
       'element:contextmenu': (elementView, evt) => {
-        console.log(elementView);
         const ct = new ui.ContextToolbar({
           tools: [
             { action: 'add_port', content: 'agregar puerto' },
@@ -201,26 +235,8 @@ export class AppComponent implements OnInit, AfterViewInit {
         ct.render();
 
         ct.on('action:add_port', () => {
-          console.log('si funciona la accions');
-          const port = {
-            group: 'in',
-            attrs: {
-              '.port-body': {
-                fill: '#16A085',
-                magnet: 'passive'
-              },
-            }
-          };
-          const port2 = {
-            group: 'in',
-            attrs: {
-              '.port-body': {
-                fill: '#16A085'
-              }
-            }
-          };
-          elementView.model.addPort(port);
-          elementView.model.addPort(port2);
+          ct.remove();
+          this.openMatDialog(elementView);
         });
       },
 
@@ -318,8 +334,16 @@ export class AppComponent implements OnInit, AfterViewInit {
 
     // cuando se presione la tecla suprimir y una celda se encuentre seleccionada
     // se removera del lienzo
-    keyboard.on('delete', () => {
-      if (celda) { celda.remove(); }
+    keyboard.on({
+      'delete': (evt) => {
+        evt.preventDefault();
+        if (celda) {
+          this.graph.removeCells([celda]);
+        }
+
+
+      },
+
     });
 
 
@@ -342,7 +366,9 @@ export class AppComponent implements OnInit, AfterViewInit {
     // primer acercamiento al elemento que define la figura para los objetos OPM
     // const rect = aux.getOPMObject();
 
-    const rect = new opm.Object().resize(350, 149);
+    const rect = new opm.Object().resize(350, 149) as shapes.devs.Atomic;
+    rect.changeInGroup(shapeConfig.inPortProps);
+    rect.changeOutGroup(shapeConfig.outPortProps);
 
 
 
@@ -443,7 +469,7 @@ export class AppComponent implements OnInit, AfterViewInit {
           alertify.error('no se pudo establecer conexion con la base de datos');
         });
         // se actualiza el stencil con el nuevo registro
-        this.updateStencilDB(stencilDB, 'myShapesGroup1');
+        //this.updateStencilDB(stencilDB, 'myShapesGroup1');
         //alertify.success('diagrama guardado en servidor');
       });
     });
@@ -479,7 +505,7 @@ export class AppComponent implements OnInit, AfterViewInit {
           const jas = JSON.parse(content);
 
           // se limpia contenido del grafo y se carga el contenido obtenido en el archivo 
-          console.log(graph);
+
           graph.clear();
           this.graph.fromJSON(jas);
 
@@ -493,7 +519,6 @@ export class AppComponent implements OnInit, AfterViewInit {
         reader.onload = (evt) => { success(evt.target.result as string); };
         // lee el contenido de un archivo como texto
         // desencadena el evento onload y si tiene exito se ejecuta la funcion success
-        console.log(ar);
         reader.readAsText(ar);
 
 
@@ -589,136 +614,6 @@ export class AppComponent implements OnInit, AfterViewInit {
       this.globalInspector = aux.createInspector(elementView);
     });
 
-    const rca = new shapes.standard.Rectangle({
-      ports: {
-
-      }
-    });
-
-    const rc = new shapes.devs.Model({
-      attrs: {
-        ".label": { text: 'hola' }
-      },
-      inPorts: ['in1', 'in2'],
-      outPorts: ['out1'],
-      ports: {
-        groups: {
-          'in': {
-            attrs: {
-              '.port-body': {
-                fill: '#16A085'
-              }
-            }
-          },
-          'out': {
-            attrs: {
-              '.port-body': {
-                fill: 'red'
-              }
-            }
-          }
-        }
-      }
-
-    });
-
-    rc.resize(150, 150);
-    const port = {
-      group: 'in',
-      attrs: {
-        '.port-body': {
-          fill: '#16A085'
-        }
-      }
-    };
-    rc.addPort(port);
-
-    //graph.addCell(rc);
-
-    var connect = function (source, sourcePort, target, targetPort) {
-
-      var link = new shapes.devs.Link({
-        source: {
-          id: source.id,
-          port: sourcePort
-        },
-        target: {
-          id: target.id,
-          port: targetPort
-        }
-      });
-
-      link.addTo(graph).reparent();
-    };
-
-
-    var c1 = new shapes.devs.Coupled({
-      attrs: {
-        ".body": {
-          stroke: '#FEb663',
-          strokeWidth: 6,
-          rx: 6,
-          ry: 6
-        },
-        ".label": {
-          fill: '#FEB663',
-          fontSize: 16,
-          fontWeight: 800,
-        },
-        subbody: {
-          refX: '10%',
-          refY: '15%',
-          refWidth: '80%',
-          refHeight: '70%',
-          fill: 'black',
-          stroke: 'black'
-        },
-
-      },
-      markup: [{
-        tagName: 'rect',
-        selector: '.body'
-      },
-      {
-        tagName: 'text',
-        selector: '.label'
-      },
-
-      {
-        tagName: 'rect',
-        selector: 'subbody'
-      },
-      ],
-
-      ports: {
-        groups: {
-          'in': {
-            attrs: {
-              '.port-body': {
-                fill: 'blue',
-                stroke: '#ffffff',
-                strokeWidth: '3px'
-              }
-            }
-          }
-        }
-      },
-
-      position: {
-        x: 230,
-        y: 50
-      },
-      size: {
-        width: 300,
-        height: 300
-      }
-
-    });
-
-    c1.set('inPorts', ['in']);
-    c1.set('outPorts', ['out 1', 'out 2']);
-
-    graph.addCell(c1);
 
 
 

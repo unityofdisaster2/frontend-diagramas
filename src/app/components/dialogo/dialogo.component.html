@@ -1,0 +1,28 @@
+<h1 mat-dialog-title>Seleccione el tipo de puerto</h1>
+<div mat-dialog-content>
+    <div layout="column" align="center">
+        <div flex>
+            <mat-form-field>
+                <mat-label>I/O</mat-label>
+                <mat-select [(ngModel)]="tipo">
+                    <mat-option value="0">Input</mat-option>
+                    <mat-option value="1">Output</mat-option>
+                </mat-select>
+            </mat-form-field>
+        </div>
+        <div flex>
+            <mat-divider></mat-divider>
+        </div>
+
+        <div flex>
+            <mat-form-field>
+                <mat-label>nombre</mat-label>
+                <input matInput type="text" [(ngModel)]="nombre">
+            </mat-form-field>
+        </div>
+    </div>
+</div>
+<div mat-dialog-actions align="end">
+    <button mat-button mat-dialog-close>Close</button>
+    <button mat-button (click)="onSendValues()">Confirmar</button>
+</div>

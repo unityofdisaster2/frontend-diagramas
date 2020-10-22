@@ -9,15 +9,13 @@ import * as joint from '@clientio/rappid';
 export const opm = {
 
     // definicion de la figura que representara al elemento objeto
-    Object: joint.dia.Element.define('opm.Object', {
+    Object: joint.shapes.devs.Atomic.define('opm.Object', {
         attrs: {
-            body: {
-                // configuracion para generar un rectangulo como body
+            ".body": {
                 refWidth: '100%',
                 refHeight: '100%',
                 strokeWidth: 4,
                 fill: '#FFFFFF',
-                //stroke: '#70E483'
                 stroke: '#62FC6A',
                 magnet: true,
                 filter: {
@@ -37,21 +35,17 @@ export const opm = {
                 fill: 'transparent',
                 stroke: 'transparent'
             },
-            label: {
+            '.label': {
                 // configuracion para posicionamiento de label dentro del rectangulo
-                textVerticalAnchor: 'middle',
-                textAnchor: 'middle',
-                refX: '50%',
-                refY: '50%',
+
                 fontSize: 20,
                 fill: '#333333',
                 text: 'Objeto'
-            }
-        }
-    }, {
+            },
+        },
         markup: [{
             tagName: 'rect',
-            selector: 'body',
+            selector: '.body',
         },
         {
             tagName: 'rect',
@@ -59,8 +53,12 @@ export const opm = {
         },
         {
             tagName: 'text',
-            selector: 'label',
-        }]
+            selector: '.label',
+        }],
+    }),
+
+    ParentObject: joint.shapes.devs.Coupled.define('opm.ParentObject', {
+        
     }),
 
     // definicion de la figura que representara al elemento proceso
@@ -157,8 +155,26 @@ export const opm = {
             }
         }]
     }),
-    ParentObject: joint.shapes.devs.Coupled.define('opm.ParentObject', {
-        
-    })
+
+};
+
+
+export const shapeConfig = {
+    inPortProps: {
+        attrs: {
+            '.port-body': {
+                fill: '#FFF82D',
+                stroke: '#62FC6A',
+            }
+        }
+    },
+    outPortProps: {
+        attrs: {
+            '.port-body': {
+                fill: '#E644FF',
+                stroke: '#62FC6A'
+            }
+        }
+    }
 };
 
