@@ -1,0 +1,32 @@
+<h1 mat-dialog-title>Guardar diagrama</h1>
+<div mat-dialog-content>
+    <div layout="column" align="center">
+        <div flex>
+            <mat-form-field>
+                <mat-label>colección</mat-label>
+                <mat-select [(value)]="seleccionado">
+                    <mat-option *ngFor="let col of coleccion" [value]="col.value">
+                        {{col.viewValue}}
+                    </mat-option>
+                    <!-- <mat-option value="0">Componentes</mat-option>
+                    <mat-option value="1">Subsistemas</mat-option>
+                    <mat-option value="2">Sistemas</mat-option> -->
+                </mat-select>
+            </mat-form-field>
+        </div>
+        <div flex>
+            <mat-divider></mat-divider>
+        </div>
+
+        <div flex>
+            <mat-form-field>
+                <mat-label>nombre</mat-label>
+                <input matInput type="text" [(ngModel)]="nombre">
+            </mat-form-field>
+        </div>
+    </div>
+</div>
+<div mat-dialog-actions align="end">
+    <button mat-button mat-dialog-close>Close</button>
+    <button mat-button (click)="onSendValues()">Confirmar</button>
+</div>

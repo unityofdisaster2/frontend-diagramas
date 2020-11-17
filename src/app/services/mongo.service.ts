@@ -20,11 +20,13 @@ export class MongoService {
       });
   }
 
-  insertGraph(grafo: JSON, image: any) {
+  insertGraph(grafo: JSON, image: any, group: string, name: string) {
     const url = 'http://localhost:3000/api/insertGraph';
     const auxJson = {
-      grafo: grafo,
-      image: image,
+      grafo,
+      image,
+      group,
+      name
     };
 
     return this.http.post<any>(url, auxJson);

@@ -19,9 +19,27 @@
 .stencil-container {
     position: absolute;
     left: 205px;
-    top: 0;
+    top: 300px;
     bottom: 0;
     width: 200px;
+}
+
+.tree-view-title {
+    position: absolute;
+    left: 205px;
+    top: 0;
+    background-color: #383b61;
+    width: 200px;
+}
+
+.tree-view-container {
+    position: absolute;
+    left: 205px;
+    top: 30px;
+    bottom: 360px;
+    width: 200px;
+    overflow-x: scroll;
+    overflow-y: scroll;
 }
 
 .stencil-db {

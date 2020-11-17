@@ -63,7 +63,7 @@ export class RappidOPMUtils {
             return ui.Inspector.create('.inspector-container', {
                 cell: elementView.model,
                 inputs: {
-                    'attrs/label/text': {
+                    'attrs/.label/text': {
                         type: 'text',
                         label: 'nombre',
                         index: 2,
@@ -74,8 +74,7 @@ export class RappidOPMUtils {
                         type: 'select',
                         label: 'type',
                         index: 3,
-                        options: ['component', 'matEq', 'cat1', 'cat2', 'cat3'],
-
+                        options: ['padre', 'externo'],
                         group: 'objectGroup'
                     },
 
@@ -188,4 +187,14 @@ export class RappidOPMUtils {
         });
     }
 
+}
+
+
+export interface OPDNode {
+    name: string;
+    id: string;
+    level?: number;
+    jsonGraph?: any;
+    type: string;
+    children?: OPDNode[];
 }

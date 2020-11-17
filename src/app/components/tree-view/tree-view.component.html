@@ -1,0 +1,41 @@
+<!-- [dataSource] proporciona un stream con los datos mas recientes que se deben renderizar -->
+<mat-tree [dataSource]="dataSource" [treeControl]="treeControl" class="opd-hierarchy">
+    <!-- This is the tree node template for leaf nodes -->
+    <mat-tree-node *matTreeNodeDef="let node" matTreeNodeToggle>
+        <li class="mat-tree-node">
+            <!-- use a disabled button to provide padding for tree leaf -->
+            <button mat-icon-button disabled></button>
+            <!-- <button mat-flat-button style="border-radius: 100px" class="node-btn" (dblclick)="printName(node)">
+                {{node.name}}
+            </button> -->
+            <mat-chip-list>
+                <!-- cuando se de doble click debe mandar algo al componente padre -->
+                <mat-chip color="accent" (dblclick)="enviarNodo(node)" class="node-chip">{{node.name}}</mat-chip>
+            </mat-chip-list>
+        </li>
+    </mat-tree-node>
+    <!-- This is the tree node template for expandable nodes -->
+    <mat-nested-tree-node *matTreeNodeDef="let node; when: hasChild">
+        <li>
+            <div class="mat-tree-node">
+                <button mat-icon-button matTreeNodeToggle [attr.aria-label]="'Toggle ' + node.name">
+                    <mat-icon class="mat-icon-rtl-mirror" style="color:#d8d8ec">
+                        {{treeControl.isExpanded(node) ? 'remove_circle_outline' : 'add_circle_outline'}}
+                    </mat-icon>
+                </button>
+                <!-- <button mat-flat-button style="border-radius: 100px" class="node-btn" (dblclick)="printName(node)">
+                    {{node.name}}
+                </button> -->
+
+                <mat-chip-list>
+                    <!-- cuando se de doble click debe mandar algo al componente padre -->
+                    <mat-chip color="accent" (dblclick)="enviarNodo(node)" class="node-chip">{{node.name}}</mat-chip>
+                </mat-chip-list>
+
+            </div>
+            <ul [class.opd-hierarchy-invisible]="!treeControl.isExpanded(node)">
+                <ng-container matTreeNodeOutlet></ng-container>
+            </ul>
+        </li>
+    </mat-nested-tree-node>
+</mat-tree>

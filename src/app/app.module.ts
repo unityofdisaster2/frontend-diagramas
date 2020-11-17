@@ -12,10 +12,20 @@ import { DialogoComponent } from './components/dialogo/dialogo.component';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDividerModule } from '@angular/material/divider';
 import { FormsModule } from '@angular/forms';
+import { DialogoSaveComponent } from './components/dialogo-save/dialogo-save.component';
+import { TreeViewComponent } from './components/tree-view/tree-view.component';
+import { MatTreeModule} from '@angular/material/tree';
+import { MatIconModule } from '@angular/material/icon';
+import { MatProgressBarModule} from '@angular/material/progress-bar';
+
+import { MatChipsModule } from '@angular/material/chips';
+import { MongoService } from './services/mongo.service';
 @NgModule({
   declarations: [
     AppComponent,
-    DialogoComponent
+    DialogoComponent,
+    DialogoSaveComponent,
+    TreeViewComponent
   ],
   imports: [
     BrowserModule,
@@ -26,8 +36,11 @@ import { FormsModule } from '@angular/forms';
     MatInputModule,
     MatSelectModule,
     MatDividerModule,
-    FormsModule
-
+    FormsModule,
+    MatTreeModule,
+    MatIconModule,
+    MatProgressBarModule,
+    MatChipsModule
   ],
   providers: [],
   bootstrap: [AppComponent]

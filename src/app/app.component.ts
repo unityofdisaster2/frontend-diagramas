@@ -1,12 +1,19 @@
 import { OnInit, Component, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
 import { dia, ui, shapes, setTheme, g, linkTools, util } from '@clientio/rappid';
 import { MongoService } from './services/mongo.service';
-import { RappidOPMUtils } from './utils/rappid-opm-utils';
+import { RappidOPMUtils, OPDNode } from './utils/rappid-opm-utils';
 import { saveAs } from 'file-saver';
 import * as alertify from 'alertifyjs';
 import { opm, shapeConfig } from './utils/custom-shapes';
 import { DialogoComponent } from './components/dialogo/dialogo.component';
 import { MatDialog } from '@angular/material/dialog';
+import { cloneDeep, isString } from 'lodash';
+
+import { TreeViewComponent } from './components/tree-view/tree-view.component';
+import { DialogoSaveComponent } from './components/dialogo-save/dialogo-save.component';
+import { StencilService } from './services/stencil.service';
+
+
 
 @Component({
   selector: 'app-root',
@@ -20,36 +27,47 @@ export class AppComponent implements OnInit, AfterViewInit {
   @ViewChild('stencilContainer') stencilContainer: ElementRef;
   @ViewChild('stencilDB') stencilDBContainer: ElementRef;
   @ViewChild('toolbarContainer') toolbarContainer: ElementRef;
-
+  @ViewChild(TreeViewComponent) treeViewChild: TreeViewComponent;
 
   // declaracion de componentes de la clase
-  private graph: dia.Graph;
-  private graphStructure: object;
+  private rootGraph: dia.Graph;
+  private currentGraph: dia.Graph;
   private keyboard: ui.Keyboard;
   private paper: dia.Paper;
   private scroller: ui.PaperScroller;
   private stencil: ui.Stencil;
   private stencilDB: ui.Stencil;
   private toolbar: ui.Toolbar;
-  private dbObjects: Array<object>;
+  OPDTree: OPDNode[] = [];
+  currentID: string;
+  private dbObjects: Array<shapes.standard.Image>;
   private objectMaps: any;
   private globalInspector: ui.Inspector;
 
-  constructor(private mongo: MongoService, public dialog: MatDialog) { }
+  constructor(private mongo: MongoService,
+              public dialog: MatDialog,
+              public stencilServ: StencilService) { }
 
+  /**
+   * funcion utilizada para llamar una ventana de dialogo para agregar puertos
+   * de entrada o salida a un elemento (objecto o proceso)
+   * @param elemento modelo del elemento
+   */
   openMatDialog(elemento: dia.ElementView) {
+    // se abre la ventana de dialogo y se guarda la referencia en una variable
     const dialogRef = this.dialog.open(DialogoComponent);
+    // por medio de la referencia se suscribe al objeto parentCOM para
+    // estar pendiente cuando emita un evento
     dialogRef.componentInstance.parentCOM.subscribe(() => {
       let port: {};
+      // se verifica el tipo guardado en la referencia
+      // y se crea el puerto que corresponda
       if (dialogRef.componentInstance.tipo === '0') {
-        //input
         port = {
           group: 'in',
           attrs: {
-            '.port-body': {
-              magnet: 'passive'
-            },
             text: {
+              // se pasa como texto el valor que tenga el input de la ventana de dialog
               text: dialogRef.componentInstance.nombre
             }
           },
@@ -71,51 +89,145 @@ export class AppComponent implements OnInit, AfterViewInit {
         dialogRef.close();
       }
     });
+
+  }
+
+  openSaveDialog(paper: dia.Paper, stencil: ui.Stencil) {
+    // se abre la ventana de dialogo y se guarda la referencia en una variable
+    const dialogRef = this.dialog.open(DialogoSaveComponent);
+    // por medio de la referencia se suscribe al objeto parentCOM para
+    // estar pendiente cuando emita un evento
+    dialogRef.componentInstance.parentCOM.subscribe(() => {
+      const tipo = dialogRef.componentInstance.seleccionado;
+      const nombre = dialogRef.componentInstance.nombre;
+      // se llama funcion to PNG para crear una imagen con el contenido
+      // actual del diagrama
+      paper.toPNG((imgData) => {
+        this.mongo.insertGraph(this.currentGraph.toJSON(), imgData, tipo, nombre).subscribe((data) => {
+          this.stencilServ.updateStencilDB(this.dbObjects, this.objectMaps, stencil, this.mongo);
+          //this.updateStencilDB(stencil);
+          alertify.success('diagrama guardado en servidor');
+        }, (err) => {
+          alertify.error('no se pudo establecer conexion con la base de datos');
+        });
+      });
+
+      if (dialogRef.componentInstance.closed) {
+        dialogRef.close();
+      }
+    });
+
+  }
+
+
+  /**
+   * funcion utiizada para crear un arreglo de objetos conforme al numero
+   * de parametros que tenga un elemento 'opm.object'
+   * @param el modelo del elemento seleccionado
+   * @returns arreglo de objetos
+   */
+  createObjectArray(el: dia.ElementView): Array<shapes.devs.Atomic> {
+    const arreglo: Array<shapes.devs.Atomic> = [];
+    // se verifica la existencia del atributo parametros. En caso de
+    // encontrarlo se itera sobre las entradas de su arreglo
+
+    if (el.model.attributes.parametros !== undefined) {
+      for (const params of el.model.attributes.parametros.entries()) {
+
+        const tempObj = new opm.Object() as shapes.devs.Atomic;
+        // entries genera un iterador con los pares clave/valor, para los indices del array
+        // por ello se toma el segundo y es el que se asigna a los parametros del objeto temporal
+        tempObj.attributes.parametros = [params[1]];
+        // se pone al objeto temporal el nombre del parametro seleccionado
+        tempObj.attr('.label/text', params[1].name);
+
+        arreglo.push(tempObj);
+      }
+    }
+
+    return arreglo;
+  }
+
+  searchNode(tree: OPDNode[], id: string): OPDNode {
+    for (const element of tree) {
+      console.log(element.id);
+      if (element.id === id) {
+        console.log('si hace algo');
+        // se debe retornar el nodo en realidad
+        return element;
+      } else if (element.children) {
+        return this.searchNode(element.children, id);
+      }
+    }
+  }
+
+  changeGraphView($event: OPDNode) {
+    console.log('id del evento: ', $event);
+    if (this.currentID === $event.id) {
+      console.log('se esta seleccionando lo mismo');
+    } else {
+      const currentNode = this.searchNode(this.OPDTree, this.currentID);
+      if (currentNode === null) {
+        console.log(this.currentID);
+        console.log(this.OPDTree);
+        console.log('no se encontro nodo actual');
+      }
+      currentNode.jsonGraph = cloneDeep(this.currentGraph);
+      const nodo = this.searchNode(this.OPDTree, $event.id);
+      if (nodo === null) {
+        console.log('no se encontro nodo al que se desea cambiar');
+      }
+      this.currentID = $event.id;
+      this.currentGraph.clear();
+      this.currentGraph.fromJSON(nodo.jsonGraph.toJSON());
+    }
+    console.log('cambio de vista');
+    console.log($event);
+  }
+
+  initTree() {
+    this.OPDTree = [];
+    this.OPDTree.push({
+      name: 'root',
+      id: 'root',
+      type: 'root',
+      jsonGraph: this.currentGraph,
+      level: 0,
+    });
+    this.currentID = 'root';
   }
 
 
 
   public ngOnInit(): void {
 
-    //objeto que contiene todas las definiciones de OPM
+
+
+
+
+
+    // objeto que contiene todas las definiciones de OPM
     const aux = new RappidOPMUtils();
 
 
 
     // tema de rappid
     setTheme('modern');
-
     // objeto que contendra toda la estructura del grafo generado en el diagrama
-    const graph = this.graph = new dia.Graph({}, {
+    this.rootGraph = new dia.Graph({}, {
       // se debe especificar el namespace de shapes para que reconozca las figuras
       // personalizadas
       // cellNamespace: shapes
       cellNamespace: { opm, shapes }
     });
 
-    interface GraphStructure {
-      root: dia.Graph;
-      level: 0;
-      inZoomedChildrens?: [{
-        name: string,
-        kind: string,
-        id: string,
-        level: number,
-        structure: GraphStructure
-      }];
-    }
-    // como la interfaz anterior tecnicamente puede crecer hasta infinito
-    // la forma mas "facil" de iterar sobre un objeto que la utilice
-    // seria utilizando recursion o un ciclo muy complejo
+    this.currentGraph = this.rootGraph;
+    // objeto que contendra toda la estructura del grafo generado en el diagrama
 
 
-    // clase que tenga root, tenga children, se pueda agregar valores a los children
-    // y esos children tengan la opcion de agregar mas children
-    // if element has childs
+    this.initTree();
 
 
-    // una clase que tenga como parametro la misma clase o en este caso 
-    // una interfaz que tenga como parametro su propio tipo
 
 
 
@@ -132,7 +244,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       drawGrid: {
         name: 'mesh'
       },
-      model: graph,
+      model: this.currentGraph,
       defaultLink: (elementView, magnet) => {
 
         // se utiliza como link por defecto el de resultado consumo de OPM
@@ -144,7 +256,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       linkPinning: false,
       async: true,
       // opcion para evitar que se agrupen elementos al sobreponerlos
-      embeddingMode: false,
+      embeddingMode: true,
       cellViewNamespace: { opm, shapes }
     });
 
@@ -153,7 +265,7 @@ export class AppComponent implements OnInit, AfterViewInit {
     // objeto que permite seleccionar elementos de maneras personalizadas
     const selection = new ui.Selection({
       paper,
-      graph
+      graph: this.currentGraph
     });
 
 
@@ -171,7 +283,7 @@ export class AppComponent implements OnInit, AfterViewInit {
           selection.cancelSelection();
           scroller.startPanning(evt);
         }
-        // al activarse este evento se esconden las toolViews de los links que 
+        // al activarse este evento se esconden las toolViews de los links que
         // se encuentran activas
         paper.hideTools();
         if (this.globalInspector) {
@@ -195,22 +307,20 @@ export class AppComponent implements OnInit, AfterViewInit {
       'element:pointerup': (elementView, evt, x, y) => {
         // se obtienen las coordenadas del sitio donde se solto el puntero
         const coordenadas = new g.Point(x, y);
-        // se toma el modelo del elemento que haya sido arrastrado 
+        // se toma el modelo del elemento que haya sido arrastrado
         const elementoSuperior = elementView.model;
         // se busca si hay un elemento debajo del que se ha arrastrado
-        const elementoInferior = graph.findModelsFromPoint(coordenadas).find((el => {
+        const elementoInferior = this.currentGraph.findModelsFromPoint(coordenadas).find((el => {
           return (el.id !== elementoSuperior.id);
         }));
 
         // si existe un elemento debajo se retorna el elemento superior a su posicion original
         if (elementoInferior) {
-          elementoSuperior.position(evt.data.x, evt.data.y);
+          elementoInferior.embed(elementoSuperior);
+          // console.log(this.graphContainer);
         }
       },
 
-      'element:pointerdblclick': (elementView, evt) => {
-        alertify.success('doble click a elemento');
-      },
 
       // evento que escucha cuando el mouse esta sobre un elemento
       'element:mouseover': (elementView, evt) => {
@@ -223,20 +333,75 @@ export class AppComponent implements OnInit, AfterViewInit {
         cellView.model.attr('body/opacity', 'none');
       },
 
+      // menu contextual sobre un elemento (click derecho)
       'element:contextmenu': (elementView, evt) => {
+        // se utiliza el componente para mostrar menu personalizado con dos opciones
+
+
         const ct = new ui.ContextToolbar({
           tools: [
             { action: 'add_port', content: 'agregar puerto' },
             { action: 'zoom', content: 'in zoom' }
           ],
+          // se renderiza el menu a un lado del elemento que haya sido presionado
           target: elementView.el,
           autoClose: true,
         });
+
         ct.render();
 
+        // accion ejecutada al presionar el boton add_port
         ct.on('action:add_port', () => {
+          // se remueve el menu contextual para evitar crear dialogos indefinidamente
           ct.remove();
           this.openMatDialog(elementView);
+        });
+
+        // accion ejecutada al presionar boton zoom
+        ct.on('action:zoom', () => {
+          // se crea nueva grafo
+          const nodoActual = this.searchNode(this.OPDTree, this.currentID);
+          if (nodoActual.children === undefined) {
+            nodoActual.children = [];
+          }
+
+          nodoActual.jsonGraph = cloneDeep(this.currentGraph);
+
+          nodoActual.children.push({
+            name: elementView.model.attributes.attrs['.label'].text,
+            id: elementView.model.id,
+            type: 'opm.object',
+            level: nodoActual.level + 1
+          });
+          this.currentID = elementView.model.id;
+
+
+
+
+          this.treeViewChild.updateTree(this.OPDTree);
+          const arreglo = this.createObjectArray(elementView) as Array<shapes.devs.Atomic>;
+          const zoomGraph = new dia.Graph();
+          const padre = new opm.ParentObject() as shapes.devs.Coupled;
+
+          padre.resize(400, 400);
+          padre.changeInGroup(shapeConfig.inPortProps);
+          padre.changeOutGroup(shapeConfig.outPortProps);
+          // this.graphContainer.root = cloneDeep(this.rootGraph);
+          this.currentGraph.clear();
+          padre.attributes.attrs['.label'].text = elementView.model.attributes.attrs['.label'].text;
+          let cont = 0;
+          for (const el of arreglo.entries()) {
+            el[1].position(cont * 100, cont * 100);
+            padre.embed(el[1]);
+            // console.log(el[1]);
+            cont += 1;
+          }
+          zoomGraph.addCell(padre);
+          zoomGraph.addCells(arreglo);
+          // padre.position(250, 250);
+
+          this.currentGraph.fromJSON(zoomGraph.toJSON());
+          ct.remove();
         });
       },
 
@@ -303,7 +468,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       },
 
       // evento que escucha cuando se suelta el puntero sobre un link
-      // se activa tanto finalizar la conexion del link como al darle click
+      // se activa tanto al finalizar la conexion del link como al darle click
       'link:pointerup': (linkView) => {
         paper.removeTools();
         // creacion de herramientas que tendra cada link que sea presionado
@@ -335,10 +500,10 @@ export class AppComponent implements OnInit, AfterViewInit {
     // cuando se presione la tecla suprimir y una celda se encuentre seleccionada
     // se removera del lienzo
     keyboard.on({
-      'delete': (evt) => {
+      delete: (evt) => {
         evt.preventDefault();
         if (celda) {
-          this.graph.removeCells([celda]);
+          this.currentGraph.removeCells([celda]);
         }
 
 
@@ -363,73 +528,69 @@ export class AppComponent implements OnInit, AfterViewInit {
 
 
 
-    // primer acercamiento al elemento que define la figura para los objetos OPM
-    // const rect = aux.getOPMObject();
-
     const rect = new opm.Object().resize(350, 149) as shapes.devs.Atomic;
     rect.changeInGroup(shapeConfig.inPortProps);
     rect.changeOutGroup(shapeConfig.outPortProps);
 
 
 
-    // primer acercamiento al elemento que define la figura para los procesos OPM
-
-    // const circ = aux.getOPMProcess();
-
     const circ = new opm.Process().resize(300, 150);
     // declaracion de paleta que contendra los elementos basicos de OPM
-    const stencil = this.stencil = new ui.Stencil({
-      paper: scroller,
-      label: 'Object Process Methodology',
-      width: 200,
-      dropAnimation: true,
-      groupsToggleButtons: true,
-      groups: {
-        g1: { index: 1, label: 'grupo1', height: 300 },
-
-      },
-      layout: {
-        columnWidth: 150,
-        columns: 1,
-        rowHeight: 100,
-      }
-    });
+    const stencil = this.stencil = this.stencilServ.createOPMStencil(scroller);
 
     stencil.render();
 
     // carga de figuras basicas de OPM en la paleta
-    stencil.load({ g1: [rect, circ] });
+    stencil.load({ OPM: [rect, circ] });
 
 
 
     // declaracion de paleta donde se mostraran diagramas alojados en base de datos
     // y que pueden ser arrastrados para formar parte de un nuevo sistema.
-    const stencilDB = this.stencilDB = new ui.Stencil({
-      paper: scroller,
-      label: 'coleccion de diagramas',
-      scaleClones: true,
-      width: 200,
-      groups: {
-        myShapesGroup1: { index: 1, label: 'Componentes', height: 600 },
-        subsistemas: { index: 2, label: 'Subsistemas', height: 600 },
-        sistemas: { index: 3, label: 'Sistemas', height: 600 }
-      },
-      dropAnimation: true,
-      groupsToggleButtons: true,
-      search: {
-        // se puede implementar la busqueda por un atributo especifico
-        '*': ['type', 'attrs/label/text']
-      },
-      // se utiliza layout para que los elementos no se muestren de forma desordenada
-      layout: true  // Use default Grid Layout
-    });
+    const stencilDB = this.stencilDB = this.stencilServ.createDBStencil(scroller);
 
     stencilDB.render();
     stencilDB.closeGroups();
     // se carga por primera vez los diagramas alojados en la base de datos
-    this.updateStencilDB(stencilDB, 'myShapesGroup1');
+    this.stencilServ.updateStencilDB(this.dbObjects, this.objectMaps, stencilDB, this.mongo);
+    //this.updateStencilDB(stencilDB);
+
+    // evento del grafo que se activa cuando se agrega un elemento al lienzo
+    this.currentGraph.on('add', (cell, collection, opt) => {
+      // se verifica si el objeto agregado viene de un stencil
+      // tambien se comprueba que el tipo de elemento sea imagen ya que
+      // los elementos con este tag son utilizados para guardar las referencias
+      // correspondientes a los diagramas obtenidos de la base de datos
+      if (opt.stencil && cell.attributes.type === 'standard.Image') {
+        // se itera sobre el atributo object maps para encontrar el elemento con
+        // el id correspondiente
+        for (const element of this.objectMaps) {
+          if (cell.attributes.prop.mongoID === element._id) {
+
+            this.currentGraph.clear();
+            // se guarda en grafo y se renderiza el json que corresponda al elemento arrastrado
+            if (isString(element.grafo)) {
+              this.currentGraph.fromJSON(JSON.parse(element.grafo));
+            } else {
+              this.currentGraph.fromJSON(element.grafo);
+            }
+            paper.update();
+            break;
+          }
+        }
+      }
+      // se cambian las dimensiones del objeto cuando es agregado desde el stencil
+      else if (opt.stencil && cell.attributes.type === 'opm.Object') {
+        cell.attributes.size.height = 60;
 
 
+      }
+      // se cambian las dimensioneWs del elemento proceso cuando es agregado desde el stencil
+      else if (opt.stencil && cell.attributes.type === 'opm.Process') {
+        cell.attributes.size.height = 80;
+        cell.attributes.size.width = 150;
+      }
+    });
 
     // barra de herramientas superior
     const toolbar = this.toolbar = new ui.Toolbar({
@@ -438,7 +599,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         { type: 'zoomOut', name: 'zoomOut', },
         { type: 'zoomToFit', name: 'fit' },
         { type: 'separator' },
-        //{ type: 'button', name: 'nuevo', text: 'new Diagram' },
+        // { type: 'button', name: 'nuevo', text: 'new Diagram' },
         { type: 'button', name: 'save_server', text: 'Save to Server' },
         { type: 'button', name: 'load', text: 'Load Diagram' },
         { type: 'button', name: 'save', text: 'Save' },
@@ -452,26 +613,22 @@ export class AppComponent implements OnInit, AfterViewInit {
       }
     });
 
+
+
     // evento que escucha cuando se presiona el boton clear de la barra de herramientas
     toolbar.on('clear:pointerclick', (evt) => {
       // se elimina el contenido del grafo y se actualiza el paper
-      graph.clear();
+      this.currentGraph.clear();
+      this.initTree();
+      this.treeViewChild.updateTree(this.OPDTree);
       paper.update();
     });
 
     // evento que escucha cuanco se presiona el boton save_server de la barra de herramientas
     toolbar.on('save_server:pointerclick', (evt) => {
-      // se llama funcion to PNG para crear una imagen con el contenido
-      // actual del diagrama
-      paper.toPNG(async (imgData) => {
-        // se envia grafo e imagen a la base de datos
-        this.mongo.insertGraph(graph.toJSON(), imgData).subscribe((data) => { }, (err) => {
-          alertify.error('no se pudo establecer conexion con la base de datos');
-        });
-        // se actualiza el stencil con el nuevo registro
-        //this.updateStencilDB(stencilDB, 'myShapesGroup1');
-        //alertify.success('diagrama guardado en servidor');
-      });
+
+      //
+      this.openSaveDialog(paper, stencilDB);
     });
 
     // evento que escucha cuando se presiona el boton load
@@ -504,10 +661,11 @@ export class AppComponent implements OnInit, AfterViewInit {
           // se convierte en formato JSON el texto generado en la funcion readAsText
           const jas = JSON.parse(content);
 
-          // se limpia contenido del grafo y se carga el contenido obtenido en el archivo 
+          // se limpia contenido del grafo y se carga el contenido obtenido en el archivo
 
-          graph.clear();
-          this.graph.fromJSON(jas);
+          this.currentGraph.clear();
+          this.currentGraph.fromJSON(jas);
+          console.log(this.currentGraph);
 
           dialogo.close();
           paper.update();
@@ -529,36 +687,7 @@ export class AppComponent implements OnInit, AfterViewInit {
 
 
 
-    // evento del grafo que se activa cuando se agrega un elemento al lienzo
-    graph.on('add', (cell, collection, opt) => {
-      // se verifica si el objeto agregado viene de un stencil 
-      // tambien se comprueba que el tipo de elemento sea imagen ya que 
-      // estos son utilizados para guardar las referencias correspondientes
-      // a los diagramas obtenidos de la base de datos 
-      // se
-      if (opt.stencil && cell.attributes.type === 'standard.Image') {
-        // se itera sobre 
-        for (let element of this.objectMaps) {
-          if (cell.attributes.prop.mongoID === element._id) {
 
-            graph.clear();
-            graph.fromJSON(element.grafo);
-            paper.update();
-            break;
-          }
-        }
-      }
-      // se cambian las dimensiones del objeto cuando es agregado desde el stencil 
-      else if (opt.stencil && cell.attributes.type === 'opm.Object') {
-        cell.attributes.size.height = 60;
-
-      }
-      // se cambian las dimensioneWs del elemento proceso cuando es agregado desde el stencil
-      else if (opt.stencil && cell.attributes.type === 'opm.Process') {
-        cell.attributes.size.height = 80;
-        cell.attributes.size.width = 150;
-      }
-    });
 
     // evento que se activa al presionar el boton save de la barra de herramientas
     toolbar.on('save:pointerclick', (event) => {
@@ -567,8 +696,8 @@ export class AppComponent implements OnInit, AfterViewInit {
       // en imagen PNG
       paper.toPNG(async (imgData) => {
 
-        // se utiliza componente de rappid que muestra una imagen en pantalla 
-        // y atenua el resto del contenido 
+        // se utiliza componente de rappid que muestra una imagen en pantalla
+        // y atenua el resto del contenido
         const light = new ui.Lightbox({
           title: 'Guardar diagrama',
           image: imgData,
@@ -585,7 +714,8 @@ export class AppComponent implements OnInit, AfterViewInit {
 
         // evento para descargar el json generado al presionar el boton descargar json
         light.on('action:descargar_json', () => {
-          const blob = new Blob([JSON.stringify(graph.toJSON())], { type: 'text/plain;charset=utf-8' });
+          const blob = new Blob([JSON.stringify(this.currentGraph.toJSON())], { type: 'text/plain;charset=utf-8' });
+          // se utiliza libreria file-saver para habilitar la accion de descarga de contenido sobre un archivo definido
           saveAs(blob, 'diagrama.json');
           alertify.success('archivo descargado');
         });
@@ -597,9 +727,10 @@ export class AppComponent implements OnInit, AfterViewInit {
 
     // evento que permite cambiar el tamano de un elemento del diagrama
     paper.on('cell:pointerup', (cellView) => {
-      // We don't want to transform links.
+      // se evita la posibilidad de transformar links
       if (cellView.model instanceof dia.Link) { return; }
 
+      // se agrega el elemento FreeTransform al cellView seleccionado
       const freeTransform = new ui.FreeTransform({ cellView });
       freeTransform.render();
     });
@@ -607,17 +738,20 @@ export class AppComponent implements OnInit, AfterViewInit {
 
     // evento para crear un inspector cada que se hace click en algun elemento del diagrama
     paper.on('element:pointerclick', (elementView) => {
+      // se verifica si ya existe una instancia global de un inspector
+      // de ser asi se elimina
       if (this.globalInspector) {
         this.globalInspector.remove();
       }
-
+      // se crea inspector y se guarda instancia en el atributo global
       this.globalInspector = aux.createInspector(elementView);
     });
 
 
 
-
   }
+
+
 
   public ngAfterViewInit(): void {
     const { scroller, paper, canvas, stencilContainer, stencilDBContainer, toolbarContainer } = this;
@@ -633,33 +767,9 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
 
-  updateStencilDB(stencil: ui.Stencil, group: string) {
-    this.dbObjects = [];
-    this.objectMaps = {};
-    this.mongo.getRegistros().subscribe((data: Array<any>) => {
-      this.objectMaps = data;
-      for (let element of data) {
-        let imgAux = new shapes.standard.Image({
-          size: { width: 100, height: 100 },
-          position: { x: 10, y: 10 },
-          attrs: {
-            image: {
-              xlinkHref: element.image
-            },
-          },
-          prop: { mongoID: element._id }
-        });
 
-        this.dbObjects.push(
-          imgAux
-        );
-      }
 
-      stencil.load({
-        [group]: this.dbObjects,
-      });
-    }, (err) => { alertify.error('No se han podido cargar los registros de la base de datos'); });
-  }
+
 
 
 }

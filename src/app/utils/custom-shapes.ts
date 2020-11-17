@@ -11,7 +11,7 @@ export const opm = {
     // definicion de la figura que representara al elemento objeto
     Object: joint.shapes.devs.Atomic.define('opm.Object', {
         attrs: {
-            ".body": {
+            '.body': {
                 refWidth: '100%',
                 refHeight: '100%',
                 strokeWidth: 4,
@@ -58,7 +58,39 @@ export const opm = {
     }),
 
     ParentObject: joint.shapes.devs.Coupled.define('opm.ParentObject', {
-        
+        attrs: {
+            '.body': {
+                refWidth: '100%',
+                refHeight: '100%',
+                strokeWidth: 4,
+                fill: '#FFFFFF',
+                stroke: '#62FC6A',
+                magnet: true,
+                filter: {
+                    name: 'dropShadow',
+                    args: {
+                        dx: 2,
+                        dy: 2,
+                        blur: 3
+                    }
+                }
+            },
+            '.label': {
+                // configuracion para posicionamiento de label dentro del rectangulo
+
+                fontSize: 20,
+                fill: '#333333',
+                text: 'Objeto'
+            },
+        },
+        markup: [{
+            tagName: 'rect',
+            selector: '.body',
+        },
+        {
+            tagName: 'text',
+            selector: '.label',
+        }],
     }),
 
     // definicion de la figura que representara al elemento proceso

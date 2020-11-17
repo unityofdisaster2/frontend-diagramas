@@ -1,0 +1,23 @@
+.opd-hierarchy-invisible {
+    display: none;
+}
+
+.opd-hierarchy {
+    background-color: #383b61;
+    width: 100%;
+}
+
+.node-chip {
+    color: #8d93b1;
+    font-weight: bold;
+    background-color: #424568;
+
+    //background-color: ;
+}
+
+.opd-hierarchy ul,
+.opd-hierarchy li {
+    margin-top: 0;
+    margin-bottom: 0;
+    list-style-type: none;
+}

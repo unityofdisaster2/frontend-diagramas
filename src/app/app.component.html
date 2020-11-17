@@ -2,5 +2,17 @@
 <div class="stencil-db" #stencilDB></div>
 <div class="stencil-container" #stencilContainer></div>
 <div class="paper-container" #paperContainer></div>
-<div class="inspector-container" #inspectorContainer></div>
+<div class="inspector-container" #inspectorContainer></div> 
+
+
+<div class="tree-view-title">
+    <h4 style="color: #8d93b1; font-weight: bold;">HIERARCHY</h4>
+    
+</div>
+<app-tree-view 
+    class="tree-view-container" 
+    style="background-color: #383b61;" 
+    [datosArbol]="OPDTree"
+    (eventoNodo)="changeGraphView($event)">
+</app-tree-view>
 
