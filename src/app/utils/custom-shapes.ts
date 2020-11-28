@@ -149,6 +149,39 @@ export const opm = {
         ],
     }),
 
+    tempLink: joint.dia.Link.define('opm.tempLink', {
+        attrs: {
+            line: {
+                connection: true,
+                stroke: 'black',
+                strokeWidth: 2,
+                opacity: 0.5
+            },
+            wrapper: {
+                connection: true,
+                strokeWidth: 10,
+                strokeLinejoin: 'round',
+            }
+        }
+    }, {
+        markup: [{
+            tagName: 'path',
+            selector: 'wrapper',
+            attributes: {
+                fill: 'none',
+                cursor: 'pointer',
+                stroke: 'transparent'
+            }
+        }, {
+            tagName: 'path',
+            selector: 'line',
+            attributes: {
+                fill: 'none',
+            }
+        }]
+    }
+    ),
+
     // definicion de la figura que representara a la conexion result-consumption de opm
     ResultConsumptionLink: joint.dia.Link.define('opm.ResultConsumptionLink', {
         attrs: {

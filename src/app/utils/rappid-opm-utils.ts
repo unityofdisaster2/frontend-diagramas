@@ -5,7 +5,7 @@ export class RappidOPMUtils {
     // podemos guardaar aqui todas las definiciones de la ui para que no todo se encuentre
     // en la clase principal
 
-    constructor() {}
+    constructor() { }
 
 
 
@@ -32,20 +32,33 @@ export class RappidOPMUtils {
                     },
                     // creacion de estructura personalzizada para un proceso
                     parametros: {
-                        text: {
-                            type: 'list',
-                            label: 'requirements',
+                        // text: {
+                        //     type: 'list',
+                        //     label: 'requirements',
+                        //     group: 'paramGroup',
+                        //     index: 4,
+                        //     item: {
+                        //         type: 'object',
+                        //         label: 'requirements',
+                        //         properties: {
+                        //             name: { type: 'text', label: 'name' },
+                        //             nomenclature: { type: 'text', label: 'nomenclature' }
+                        //         }
+                        //     }
+                        // },
+                        tipo: {
+                            type: 'select',
+                            label: 'type',
                             group: 'paramGroup',
-                            index: 4,
-                            item: {
-                                type: 'object',
-                                label: 'requirements',
-                                properties: {
-                                    name: { type: 'text', label: 'name' },
-                                    nomenclature: { type: 'text', label: 'nomenclature' }
-                                }
-                            }
+                            index: 5,
+                            options: ['SolidWorks', 'Simulink', 'COMSOL MP']
                         },
+                        reference: {
+                            type: 'text',
+                            label: 'reference',
+                            group: 'paramGroup',
+                            index: 6,
+                        }
                     }
                 },
                 groups: {
@@ -69,14 +82,34 @@ export class RappidOPMUtils {
                         index: 2,
                         group: 'objectGroup'
                     },
-                    // tipo de componente
-                    tipo: {
-                        type: 'select',
-                        label: 'type',
-                        index: 3,
-                        options: ['padre', 'externo'],
-                        group: 'objectGroup'
+                    staticParams: {
+                        // tipo de componente
+                        objectSubtype: {
+                            type: 'select',
+                            label: 'subtype',
+                            index: 3,
+                            options: ['', 'padre', 'externo'],
+                            group: 'objectGroup'
+                        },
+                        modelType: {
+                            type: 'select',
+                            label: 'modelType',
+                            options: ['none', 'SolidWorks'],
+                            group: 'objectGroup'
+                        },
+                        modelName: {
+                            type: 'text',
+                            label: 'modelName',
+                            when: {
+                                eq: {
+                                    'staticParams/modelType': 'SolidWorks'
+                                }
+                            },
+                            group: 'objectGroup'
+                        },
                     },
+
+
 
                     // lista de parametros del objeto
                     parametros: {
@@ -90,12 +123,35 @@ export class RappidOPMUtils {
                             type: 'object',
                             properties: {
                                 name: { type: 'text', label: 'name' },
-                                type: { type: 'text', label: 'type' },
-                                kind: { type: 'text', label: 'kind' },
+                                type: { type: 'select', label: 'type', options: ['DesignVar', 'Constant', 'Dependant'] },
+                                kind: { type: 'select', label: 'kind', options: ['continuous', 'discrete', 'categorial'] },
                                 constraint: {
                                     type: 'select',
-                                    options: ['minmax', 'table'],
-                                    label: 'constraint'
+                                    options: ['min,max', 'min,max,step', 'table'],
+                                    label: 'constraint',
+                                    when: {
+                                        ne: {
+                                            'parametros/${index}/type': 'Constant'
+                                        }
+                                    }
+                                },
+                                value: {
+                                    type: 'text',
+                                    label: 'value',
+                                    when: {
+                                        eq: {
+                                            'parametros/${index}/type': 'Constant'
+                                        }
+                                    }
+                                },
+                                equation: {
+                                    type: 'text',
+                                    label: 'equation',
+                                    when: {
+                                        eq: {
+                                            'parametros/${index}/type': 'Dependant'
+                                        }
+                                    }
                                 },
                                 minmax: {
                                     type: 'object',
@@ -103,9 +159,18 @@ export class RappidOPMUtils {
                                     // el parametro minmax solo se mostrara cuando
                                     // el select de constraint tenga el valor minmax
                                     when: {
-                                        eq: {
-                                            'parametros/${index}/constraint': 'minmax'
+                                        and: [{
+                                            eq: {
+                                                'parametros/${index}/constraint': 'min,max'
+                                            }
+                                        },
+                                        {
+                                            ne: {
+                                                'parametros/${index}/type': 'Constant'
+                                            }
                                         }
+                                        ]
+
                                     },
                                     properties: {
                                         min: { type: 'number', label: 'min' },
@@ -113,24 +178,58 @@ export class RappidOPMUtils {
                                     },
 
                                 },
+                                step: {
+                                    type: 'object',
+                                    label: 'valor maximo y minimo',
+                                    // el parametro minmax solo se mostrara cuando
+                                    // el select de constraint tenga el valor minmax
+                                    when: {
+                                        and: [{
+                                            eq: {
+                                                'parametros/${index}/constraint': 'min,max,step'
+                                            }
+                                        },
+                                        {
+                                            ne: {
+                                                'parametros/${index}/type': 'Constant'
+                                            }
+                                        }
+                                        ]
+
+                                    },
+                                    properties: {
+                                        min: { type: 'number', label: 'min' },
+                                        max: { type: 'number', label: 'max' },
+                                        step: { type: 'number', label: 'step' },
+                                    },
+
+                                },
                                 table: {
-                                    type: 'text',
+                                    type: 'list',
                                     label: 'table',
+                                    item: {
+                                        type: 'text',
+                                    },
                                     // solo se mostrara este parametro cuando el select
                                     // de constraint tenga el valor de table
                                     when: {
-                                        eq: {
-                                            'parametros/${index}/constraint': 'table'
-                                        }
+                                        and: [
+                                            {
+                                                eq: {
+                                                    'parametros/${index}/constraint': 'table'
+                                                }
+                                            }, {
+                                                ne: {
+                                                    'parametros/${index}/type': 'Constant'
+                                                }
+                                            }
+                                        ]
                                     }
                                 },
                                 // campos adicionales del item
                                 description: { type: 'textarea', label: 'descripcion' },
                                 nomenclature: { type: 'text', label: 'nomenclature' },
                                 unit: { type: 'text', label: 'unit' },
-                                max: { type: 'text', label: 'max' },
-
-
                             },
                             group: 'elementGroup'
                         },
@@ -197,4 +296,11 @@ export interface OPDNode {
     jsonGraph?: any;
     type: string;
     children?: OPDNode[];
+}
+
+export interface dbModel {
+    grafo: string;
+    image: any;
+    group: string;
+    name: string;
 }

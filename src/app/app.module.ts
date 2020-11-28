@@ -19,7 +19,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule} from '@angular/material/progress-bar';
 
 import { MatChipsModule } from '@angular/material/chips';
-import { MongoService } from './services/mongo.service';
+import { MatMenuModule } from '@angular/material/menu';
 @NgModule({
   declarations: [
     AppComponent,
@@ -40,7 +40,8 @@ import { MongoService } from './services/mongo.service';
     MatTreeModule,
     MatIconModule,
     MatProgressBarModule,
-    MatChipsModule
+    MatChipsModule,
+    MatMenuModule
   ],
   providers: [],
   bootstrap: [AppComponent]

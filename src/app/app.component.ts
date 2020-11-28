@@ -30,8 +30,9 @@ export class AppComponent implements OnInit, AfterViewInit {
   @ViewChild(TreeViewComponent) treeViewChild: TreeViewComponent;
 
   // declaracion de componentes de la clase
-  private rootGraph: dia.Graph;
+
   private currentGraph: dia.Graph;
+  private tempGraph: dia.Graph;
   private keyboard: ui.Keyboard;
   private paper: dia.Paper;
   private scroller: ui.PaperScroller;
@@ -40,58 +41,43 @@ export class AppComponent implements OnInit, AfterViewInit {
   private toolbar: ui.Toolbar;
   OPDTree: OPDNode[] = [];
   currentID: string;
-  private dbObjects: Array<shapes.standard.Image>;
-  private objectMaps: any;
+  private dbObjects: Array<shapes.standard.Image> = [];
+  private objectMaps: any = {};
   private globalInspector: ui.Inspector;
 
   constructor(private mongo: MongoService,
-              public dialog: MatDialog,
-              public stencilServ: StencilService) { }
+    public dialog: MatDialog,
+    public stencilServ: StencilService) { }
 
   /**
    * funcion utilizada para llamar una ventana de dialogo para agregar puertos
    * de entrada o salida a un elemento (objecto o proceso)
    * @param elemento modelo del elemento
    */
-  openMatDialog(elemento: dia.ElementView) {
+  openMatDialog(elemento: any) {
     // se abre la ventana de dialogo y se guarda la referencia en una variable
     const dialogRef = this.dialog.open(DialogoComponent);
     // por medio de la referencia se suscribe al objeto parentCOM para
     // estar pendiente cuando emita un evento
     dialogRef.componentInstance.parentCOM.subscribe(() => {
-      let port: {};
-      // se verifica el tipo guardado en la referencia
-      // y se crea el puerto que corresponda
       if (dialogRef.componentInstance.tipo === '0') {
-        port = {
-          group: 'in',
-          attrs: {
-            text: {
-              // se pasa como texto el valor que tenga el input de la ventana de dialog
-              text: dialogRef.componentInstance.nombre
-            }
-          },
-        };
+        elemento.model.addInPort(dialogRef.componentInstance.nombre);
       } else if (dialogRef.componentInstance.tipo === '1') {
-        port = {
-          group: 'out',
-          attrs: {
-            text: {
-              text: dialogRef.componentInstance.nombre
-            }
-          }
-        };
+        elemento.model.addOutPort(dialogRef.componentInstance.nombre);
       }
 
 
-      elemento.model.addPort(port);
       if (dialogRef.componentInstance.closed) {
         dialogRef.close();
       }
     });
 
   }
-
+  /**
+   * 
+   * @param paper 
+   * @param stencil 
+   */
   openSaveDialog(paper: dia.Paper, stencil: ui.Stencil) {
     // se abre la ventana de dialogo y se guarda la referencia en una variable
     const dialogRef = this.dialog.open(DialogoSaveComponent);
@@ -103,8 +89,14 @@ export class AppComponent implements OnInit, AfterViewInit {
       // se llama funcion to PNG para crear una imagen con el contenido
       // actual del diagrama
       paper.toPNG((imgData) => {
-        this.mongo.insertGraph(this.currentGraph.toJSON(), imgData, tipo, nombre).subscribe((data) => {
-          this.stencilServ.updateStencilDB(this.dbObjects, this.objectMaps, stencil, this.mongo);
+        // se guarda grafo en base de datos y se actualiza el stencil
+        const nodoActual = this.searchNode(this.OPDTree, this.currentID);
+        nodoActual.jsonGraph = this.currentGraph.toJSON();
+        this.mongo.insertGraph(this.OPDTree, imgData, tipo, nombre).subscribe((data) => {
+          this.dbObjects = [];
+          this.objectMaps = {};
+          this.updateStencilDB(stencil);
+
           //this.updateStencilDB(stencil);
           alertify.success('diagrama guardado en servidor');
         }, (err) => {
@@ -150,10 +142,7 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   searchNode(tree: OPDNode[], id: string): OPDNode {
     for (const element of tree) {
-      console.log(element.id);
       if (element.id === id) {
-        console.log('si hace algo');
-        // se debe retornar el nodo en realidad
         return element;
       } else if (element.children) {
         return this.searchNode(element.children, id);
@@ -161,28 +150,29 @@ export class AppComponent implements OnInit, AfterViewInit {
     }
   }
 
+  /**
+   * Funcion utilizada para cambiar la vista del diagrama actual por la de otro
+   * nodo seleccionado en la jerarquia treeView (esta funcion esta ligada a treeView por medio de un @Output)
+   * @param $event nodo que ha sido seleccionado del OPDTree
+   */
   changeGraphView($event: OPDNode) {
-    console.log('id del evento: ', $event);
     if (this.currentID === $event.id) {
-      console.log('se esta seleccionando lo mismo');
+      alertify.warning('se esta seleccionando la misma vista');
     } else {
       const currentNode = this.searchNode(this.OPDTree, this.currentID);
       if (currentNode === null) {
-        console.log(this.currentID);
-        console.log(this.OPDTree);
-        console.log('no se encontro nodo actual');
+        return;
       }
-      currentNode.jsonGraph = cloneDeep(this.currentGraph);
+      currentNode.jsonGraph = this.currentGraph.toJSON();
       const nodo = this.searchNode(this.OPDTree, $event.id);
       if (nodo === null) {
-        console.log('no se encontro nodo al que se desea cambiar');
+        alertify.warning('no se encontro nodo al que se desea cambiar');
+        return;
       }
       this.currentID = $event.id;
       this.currentGraph.clear();
-      this.currentGraph.fromJSON(nodo.jsonGraph.toJSON());
+      this.currentGraph.fromJSON(nodo.jsonGraph);
     }
-    console.log('cambio de vista');
-    console.log($event);
   }
 
   initTree() {
@@ -191,7 +181,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       name: 'root',
       id: 'root',
       type: 'root',
-      jsonGraph: this.currentGraph,
+      jsonGraph: undefined,
       level: 0,
     });
     this.currentID = 'root';
@@ -214,14 +204,13 @@ export class AppComponent implements OnInit, AfterViewInit {
     // tema de rappid
     setTheme('modern');
     // objeto que contendra toda la estructura del grafo generado en el diagrama
-    this.rootGraph = new dia.Graph({}, {
+    this.currentGraph = new dia.Graph({}, {
       // se debe especificar el namespace de shapes para que reconozca las figuras
       // personalizadas
       // cellNamespace: shapes
       cellNamespace: { opm, shapes }
     });
 
-    this.currentGraph = this.rootGraph;
     // objeto que contendra toda la estructura del grafo generado en el diagrama
 
 
@@ -248,9 +237,9 @@ export class AppComponent implements OnInit, AfterViewInit {
       defaultLink: (elementView, magnet) => {
 
         // se utiliza como link por defecto el de resultado consumo de OPM
-        return new opm.ResultConsumptionLink()
-          .router('metro')
-          .connector('jumpover');
+        return new opm.tempLink();
+        // .router('metro')
+        // .connector('jumpover');
       },
       // con esta opcion los links forzosamente deben tener un origen y destino
       linkPinning: false,
@@ -341,7 +330,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         const ct = new ui.ContextToolbar({
           tools: [
             { action: 'add_port', content: 'agregar puerto' },
-            { action: 'zoom', content: 'in zoom' }
+            { action: 'inzoom', content: 'in zoom' }
           ],
           // se renderiza el menu a un lado del elemento que haya sido presionado
           target: elementView.el,
@@ -358,50 +347,64 @@ export class AppComponent implements OnInit, AfterViewInit {
         });
 
         // accion ejecutada al presionar boton zoom
-        ct.on('action:zoom', () => {
-          // se crea nueva grafo
+        ct.on('action:inzoom', () => {
+          ct.remove();
+          const nodoExistente = this.searchNode(this.OPDTree, elementView.model.id);
+          if (nodoExistente) {
+            this.changeGraphView(nodoExistente);
+            return;
+          }
+          if (elementView.model.attributes.type === 'opm.ParentObject') {
+            alertify.warning('ya se encuentra en esta vista');
+            return;
+          }
+          // se busca el nodo actual para guardar el estado del grafo
           const nodoActual = this.searchNode(this.OPDTree, this.currentID);
           if (nodoActual.children === undefined) {
             nodoActual.children = [];
           }
 
-          nodoActual.jsonGraph = cloneDeep(this.currentGraph);
+          nodoActual.jsonGraph = this.currentGraph.toJSON();
 
+          // se crea nodo hijo con los valores del objeto seleccionado
           nodoActual.children.push({
+            // se selecciona el nombre del objeto
             name: elementView.model.attributes.attrs['.label'].text,
+            // se utiliza como id el generado automaticamente por el framework
             id: elementView.model.id,
-            type: 'opm.object',
+
+            type: elementView.model.attributes.type,
             level: nodoActual.level + 1
           });
           this.currentID = elementView.model.id;
 
-
-
-
+          // se actualiza el contenido del arbol en la vista
           this.treeViewChild.updateTree(this.OPDTree);
+          // se crea un arreglo de objetos conforme a los parametros del elemento
           const arreglo = this.createObjectArray(elementView) as Array<shapes.devs.Atomic>;
-          const zoomGraph = new dia.Graph();
+          
           const padre = new opm.ParentObject() as shapes.devs.Coupled;
 
+          // se agrega la posibilidad de crear puertos en objeto padre
           padre.resize(400, 400);
           padre.changeInGroup(shapeConfig.inPortProps);
           padre.changeOutGroup(shapeConfig.outPortProps);
-          // this.graphContainer.root = cloneDeep(this.rootGraph);
+
           this.currentGraph.clear();
+          console.log('antes del error');
           padre.attributes.attrs['.label'].text = elementView.model.attributes.attrs['.label'].text;
+          console.log('despues del error');
           let cont = 0;
           for (const el of arreglo.entries()) {
             el[1].position(cont * 100, cont * 100);
             padre.embed(el[1]);
-            // console.log(el[1]);
             cont += 1;
           }
-          zoomGraph.addCell(padre);
-          zoomGraph.addCells(arreglo);
-          // padre.position(250, 250);
+          padre.position(250, 250);
 
-          this.currentGraph.fromJSON(zoomGraph.toJSON());
-          ct.remove();
+          this.currentGraph.addCell(padre);
+          this.currentGraph.addCells(arreglo);
+
         });
       },
 
@@ -427,19 +430,61 @@ export class AppComponent implements OnInit, AfterViewInit {
           if (!elementViewConnected.model.attributes.inputs) {
             elementViewConnected.model.attributes.inputs = {};
           }
-          this.globalInspector = aux.createInoutInspector(linkView.sourceView);
 
-
-          // console.log(elementViewConnected.model);
-          // console.log(linkView.sourceView.model);
-          console.log('objeto a objeto');
           if ((linkView.sourceView.model.attributes.type === 'opm.Object') &&
             (elementViewConnected.model.attributes.type === 'opm.Object')) {
-
+            console.log('objeto a objeto');
           }
           else if ((linkView.sourceView.model.attributes.type === 'opm.Object') &&
             (elementViewConnected.model.attributes.type === 'opm.Process')) {
             console.log('objeto a proceso');
+            const newLink = new opm.ResultConsumptionLink()
+              .router('metro')
+              .connector('jumpover');
+            if (linkView.sourceView.model.attributes.objectSubtype === 'padre') {
+              newLink.attr('line/stroke', '#FF2424');
+              newLink.appendLabel({
+                attrs: {
+                  text: {
+                    text: 'req'
+                  }
+                }
+              });
+
+              // se agrega relacion de objeto con proceso por medio de la propiedad processes
+              // en el objeto y la propiedad requirements en el proceso
+              if (!linkView.sourceView.model.attributes.processes) {
+                linkView.sourceView.model.attributes.processes = {};
+              }
+              console.log(elementViewConnected.model);
+              linkView.sourceView.model.attributes.processes[elementViewConnected.model.id]
+                = elementViewConnected.model.attributes.attrs.label.text;
+
+
+
+
+            } else if (linkView.sourceView.model.attributes.objectSubtype === 'externo') {
+              newLink.attr('line/stroke', '#62FC6A');
+              newLink.appendLabel({
+                attrs: {
+                  text: {
+                    text: 'in'
+                  }
+                }
+              });
+            } else if (!linkView.sourceView.model.attributes.objectSubtype ||
+              linkView.sourceView.model.attributes.objectSubtype === '') {
+              alertify.error('debe seleccionar un subtipo');
+              linkView.model.remove();
+              newLink.remove();
+              return;
+            }
+            newLink.source(linkView.sourceView.model);
+            newLink.target(elementViewConnected.model);
+            this.currentGraph.addCell(newLink);
+            linkView.model.remove();
+
+
             // todo: comportamiento cuando un link apunta de objeto a proceso
           } else if ((linkView.sourceView.model.attributes.type === 'opm.Process') &&
             (elementViewConnected.model.attributes.type === 'opm.Process')) {
@@ -462,10 +507,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         // o de proceso a proceso / objeto
       },
 
-      'link:contextmenu': (linkView) => {
-        this.globalInspector.remove();
-        this.globalInspector = aux.createInoutInspector(linkView.sourceView);
-      },
+
 
       // evento que escucha cuando se suelta el puntero sobre un link
       // se activa tanto al finalizar la conexion del link como al darle click
@@ -503,7 +545,20 @@ export class AppComponent implements OnInit, AfterViewInit {
       delete: (evt) => {
         evt.preventDefault();
         if (celda) {
-          this.currentGraph.removeCells([celda]);
+          console.log(celda);
+          console.log(this.searchNode(this.OPDTree, celda.id));
+          if (this.searchNode(this.OPDTree, celda.id)) {
+            console.log('prueba de vista superior');
+            alertify.error('no es posible eliminar');
+          } else if (celda.attributes.type === 'opm.ParentObject') {
+            alertify.error('no es posible eliminar');
+          }
+          else {
+            console.log('si llega');
+            
+            
+            this.currentGraph.removeCells([celda]);
+          }
         }
 
 
@@ -549,14 +604,15 @@ export class AppComponent implements OnInit, AfterViewInit {
     // y que pueden ser arrastrados para formar parte de un nuevo sistema.
     const stencilDB = this.stencilDB = this.stencilServ.createDBStencil(scroller);
 
-    stencilDB.render();
-    stencilDB.closeGroups();
+
+    this.dbObjects = [];
+    this.objectMaps = {};
     // se carga por primera vez los diagramas alojados en la base de datos
-    this.stencilServ.updateStencilDB(this.dbObjects, this.objectMaps, stencilDB, this.mongo);
+    this.updateStencilDB(stencilDB);
     //this.updateStencilDB(stencilDB);
 
     // evento del grafo que se activa cuando se agrega un elemento al lienzo
-    this.currentGraph.on('add', (cell, collection, opt) => {
+    this.currentGraph.on('add', (cell: dia.Cell, collection, opt) => {
       // se verifica si el objeto agregado viene de un stencil
       // tambien se comprueba que el tipo de elemento sea imagen ya que
       // los elementos con este tag son utilizados para guardar las referencias
@@ -564,16 +620,53 @@ export class AppComponent implements OnInit, AfterViewInit {
       if (opt.stencil && cell.attributes.type === 'standard.Image') {
         // se itera sobre el atributo object maps para encontrar el elemento con
         // el id correspondiente
+        this.currentGraph.removeCells([cell]);
         for (const element of this.objectMaps) {
           if (cell.attributes.prop.mongoID === element._id) {
 
-            this.currentGraph.clear();
+
+            // this.currentGraph.clear();
             // se guarda en grafo y se renderiza el json que corresponda al elemento arrastrado
             if (isString(element.grafo)) {
-              this.currentGraph.fromJSON(JSON.parse(element.grafo));
-            } else {
-              this.currentGraph.fromJSON(element.grafo);
+              const tempTree = JSON.parse(element.grafo) as OPDNode[];
+              this.tempGraph = new dia.Graph({}, { cellNamespace: { opm, shapes } });
+              console.log(tempTree);
+              this.tempGraph.fromJSON(tempTree[0].jsonGraph);
+              console.log(tempTree[0].jsonGraph);
+              console.log(this.tempGraph);
+              const celdas = this.tempGraph.getCells();
+              const figura = new opm.Process();
+              figura.position(250, 250);
+              figura.attributes.size.width = 150;
+              figura.attributes.size.height = 80;
+              celdas.forEach((dataCell) => {
+                console.log('dentro de foreach');
+                dataCell.graph = figura.graph;
+              });
+
+              this.currentGraph.addCell(figura);
+              this.currentGraph.addCells(celdas);
+              // if (element.group === 'Componentes') {
+              //   const tempTree = JSON.parse(element.grafo) as OPDNode[];
+              //   const tempGraph = new dia.Graph({}, {
+              //     cellNamespace: { opm, shapes }
+              //   });
+              //   console.log('arbol temporal', tempTree);
+              //   tempGraph.fromJSON(tempTree[0].jsonGraph);
+              //   const celdas = tempGraph.getCells();
+              //   this.currentGraph.addCells(celdas);
+              //   if (tempTree[0].children) {
+              //     if (!this.OPDTree[0].children) {
+              //       this.OPDTree[0].children = new Array<OPDNode>();
+              //     }
+              //     for (const node of tempTree[0].children) {
+              //       this.OPDTree[0].children.push(node);
+              //     }
+              //   }
+              // }
             }
+
+            this.treeViewChild.updateTree(this.OPDTree);
             paper.update();
             break;
           }
@@ -592,6 +685,19 @@ export class AppComponent implements OnInit, AfterViewInit {
       }
     });
 
+    this.currentGraph.on('remove', (cell, collection, opt) => {
+      if (cell.isLink()) {
+        if (cell.attributes.type !== 'opm.tempLink') {
+          console.log(cell);
+          console.log(this.currentGraph.getCell(cell.attributes.source));
+          console.log(this.currentGraph.getCell(cell.attributes.target));
+          alertify.success('link eliminado');
+        }
+      }
+    });
+
+
+
     // barra de herramientas superior
     const toolbar = this.toolbar = new ui.Toolbar({
       tools: [
@@ -605,6 +711,8 @@ export class AppComponent implements OnInit, AfterViewInit {
         { type: 'button', name: 'save', text: 'Save' },
         { type: 'button', name: 'clear', text: 'Clear' },
         { type: 'separator' },
+        { type: 'button', name: 'connect', text: 'connect' },
+        { type: 'button', name: 'print_tree', text: 'tree' }
       ],
       // se utilizan las referencias para que los botones tengan interaccion con
       // el lienzo u otros elementos
@@ -613,11 +721,18 @@ export class AppComponent implements OnInit, AfterViewInit {
       }
     });
 
+    toolbar.on('print_tree:pointerclick', (evt) => {
+      console.log(this.OPDTree);
+      console.log(this.currentGraph);
+    });
+
 
 
     // evento que escucha cuando se presiona el boton clear de la barra de herramientas
     toolbar.on('clear:pointerclick', (evt) => {
       // se elimina el contenido del grafo y se actualiza el paper
+      console.log('grafo antes de limpiar');
+      console.log(this.currentGraph);
       this.currentGraph.clear();
       this.initTree();
       this.treeViewChild.updateTree(this.OPDTree);
@@ -659,12 +774,15 @@ export class AppComponent implements OnInit, AfterViewInit {
         const success = (content: string) => {
 
           // se convierte en formato JSON el texto generado en la funcion readAsText
-          const jas = JSON.parse(content);
+          const jas: OPDNode[] = JSON.parse(content);
 
           // se limpia contenido del grafo y se carga el contenido obtenido en el archivo
-
+          console.log(jas);
           this.currentGraph.clear();
-          this.currentGraph.fromJSON(jas);
+          this.treeViewChild.updateTree(jas);
+          this.currentID = jas[0].id;
+          this.OPDTree = jas;
+          this.currentGraph.fromJSON(jas[0].jsonGraph);
           console.log(this.currentGraph);
 
           dialogo.close();
@@ -714,13 +832,29 @@ export class AppComponent implements OnInit, AfterViewInit {
 
         // evento para descargar el json generado al presionar el boton descargar json
         light.on('action:descargar_json', () => {
-          const blob = new Blob([JSON.stringify(this.currentGraph.toJSON())], { type: 'text/plain;charset=utf-8' });
+
+          const nodo = this.searchNode(this.OPDTree, this.currentID);
+          nodo.jsonGraph = this.currentGraph.toJSON();
+          const blob = new Blob([JSON.stringify(this.OPDTree)], { type: 'text/plain;charset=utf-8' });
           // se utiliza libreria file-saver para habilitar la accion de descarga de contenido sobre un archivo definido
           saveAs(blob, 'diagrama.json');
           alertify.success('archivo descargado');
         });
       });
 
+    });
+
+
+    toolbar.on('connect:pointerclick', (event) => {
+      // se actualiza contenido de nodo atual
+      const nodo = this.searchNode(this.OPDTree, this.currentID);
+      nodo.jsonGraph = this.currentGraph.toJSON();
+      // this.mongo.connectToMatlab(this.OPDTree).subscribe((data) => {
+      //   console.log('response:');
+      //   console.log(data);
+      // }, (err) => {
+      //   alertify.error('No se pudo establecer conexion con el servidor');
+      // });
     });
 
     toolbar.render();
@@ -764,6 +898,63 @@ export class AppComponent implements OnInit, AfterViewInit {
 
     scroller.center();
     paper.unfreeze();
+  }
+
+
+
+  updateStencilDB(stencil: ui.Stencil) {
+    this.dbObjects = [];
+    this.objectMaps = {};
+    const dbGroups = { Componentes: [], Subsistemas: [], Sistemas: [] };
+    // se realiza una peticion para obtener todos los registros
+
+    this.mongo.getRegistros().subscribe((data: Array<any>) => {
+      // se guarda el arreglo de registros obtenidos de mongo
+      this.objectMaps = data;
+      
+      for (const element of data) {
+        // se extrae la imagen que contiene cada elemento de la base de datos
+        // y se crea una figura 
+        const imgAux = new shapes.standard.Image({
+          size: { width: 100, height: 100 },
+          position: { x: 10, y: 10 },
+          attrs: {
+            image: {
+              xlinkHref: element.image,
+            },
+            label: {
+              text: element.name,
+              fill: 'white'
+            }
+          },
+          // se agrega una propiedad para asociar el id del registro de mongo a la imagen
+          prop: { mongoID: element._id }
+        });
+
+        dbGroups[element.group].push(imgAux);
+
+
+        this.dbObjects.push(
+          imgAux
+        );
+      }
+      
+      // se ajustan las dimensiones del contenedor de grupos conforme al numero de elementos
+      // que pertenezcan a ellos
+      stencil.options.groups.Componentes.height = 120 * Math.ceil(dbGroups.Componentes.length / 2);
+      stencil.options.groups.Subsistemas.height = 120 * Math.ceil(dbGroups.Subsistemas.length / 2);
+      stencil.options.groups.Sistemas.height = 120 * Math.ceil(dbGroups.Sistemas.length / 2);
+
+      stencil.render();
+      // se cargan las figuras en el grupo correspondiente
+      stencil.load({
+        Componentes: dbGroups.Componentes,
+        Subsistemas: dbGroups.Subsistemas,
+        Sistemas: dbGroups.Sistemas,
+      });
+      stencil.closeGroups();
+    }, (err) => { alertify.error('No se han podido cargar los registros de la base de datos'); });
+
   }
 
 

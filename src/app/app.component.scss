@@ -1,6 +1,6 @@
 .paper-container {
     position: absolute;
-    height: 100%;
+    height: 90%;
     overflow: hidden;
     top: 50px;  /* space for toolbar */
     left: 406px; /* space for stencil */
@@ -13,6 +13,7 @@
     right: 0;
     bottom: 0;
     width: 240px;
+    background-color: #383B61;
 }
 
 /*  Stencil  */
@@ -36,7 +37,7 @@
     position: absolute;
     left: 205px;
     top: 30px;
-    bottom: 360px;
+    bottom: 325px;
     width: 200px;
     overflow-x: scroll;
     overflow-y: scroll;

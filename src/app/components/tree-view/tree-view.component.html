@@ -12,6 +12,23 @@
                 <!-- cuando se de doble click debe mandar algo al componente padre -->
                 <mat-chip color="accent" (dblclick)="enviarNodo(node)" class="node-chip">{{node.name}}</mat-chip>
             </mat-chip-list>
+            <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Example icon-button with a menu">
+                <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+                <button mat-menu-item>
+                    <mat-icon>dialpad</mat-icon>
+                    <span>Redial</span>
+                </button>
+                <button mat-menu-item disabled>
+                    <mat-icon>voicemail</mat-icon>
+                    <span>Check voice mail</span>
+                </button>
+                <button mat-menu-item>
+                    <mat-icon>notifications_off</mat-icon>
+                    <span>Disable alerts</span>
+                </button>
+            </mat-menu>
         </li>
     </mat-tree-node>
     <!-- This is the tree node template for expandable nodes -->
@@ -29,8 +46,27 @@
 
                 <mat-chip-list>
                     <!-- cuando se de doble click debe mandar algo al componente padre -->
-                    <mat-chip color="accent" (dblclick)="enviarNodo(node)" class="node-chip">{{node.name}}</mat-chip>
+                    <mat-chip color="accent" (dblclick)="enviarNodo(node)" class="node-chip">
+                        {{node.name}}</mat-chip>
                 </mat-chip-list>
+                <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Example icon-button with a menu">
+                    <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #menu="matMenu">
+                    <button mat-menu-item>
+                        <mat-icon>dialpad</mat-icon>
+                        <span>Redial</span>
+                    </button>
+                    <button mat-menu-item disabled>
+                        <mat-icon>voicemail</mat-icon>
+                        <span>Check voice mail</span>
+                    </button>
+                    <button mat-menu-item>
+                        <mat-icon>notifications_off</mat-icon>
+                        <span>Disable alerts</span>
+                    </button>
+                </mat-menu>
+
 
             </div>
             <ul [class.opd-hierarchy-invisible]="!treeControl.isExpanded(node)">

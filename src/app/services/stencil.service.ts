@@ -52,47 +52,7 @@ export class StencilService {
 
   }
 
-  updateStencilDB(imageArray: shapes.standard.Image[], dataMap: any, stencil: ui.Stencil, mongo: any) {
-    imageArray = [];
-    const dbGroups = {Componentes: [], Subsistemas: [], Sistemas: []};
-    dataMap = {};
-
-    // se realiza una peticion para obtener todos los registros
-
-    mongo.getRegistros().subscribe((data: Array<any>) => {
-
-      dataMap = data;
-      for (const element of data) {
-        // se extrae la imagen que contiene cada elemento de la base de datos
-        // y se crea una figura de rappid
-        const imgAux = new shapes.standard.Image({
-          size: { width: 100, height: 100 },
-          position: { x: 10, y: 10 },
-          attrs: {
-            image: {
-              xlinkHref: element.image
-            },
-          },
-          // se asocia el id que le da mongo con la figura para su futura ubicacion
-          prop: { mongoID: element._id }
-        });
-
-        dbGroups[element.group].push(imgAux);
 
 
-        imageArray.push(
-          imgAux
-        );
-      }
-      // se cargan las figuras en el grupo ingresado
-      // nota: esto debe cambiar y lo ideal seria que en la base
-      // cada registro tenga su propio grupo y aqui organizar por coleccion
-      stencil.load({
-        Componentes: dbGroups.Componentes,
-        Subsistemas: dbGroups.Subsistemas,
-        Sistemas: dbGroups.Sistemas,
-      });
-    }, (err) => { alertify.error('No se han podido cargar los registros de la base de datos'); });
 
-  }
 }

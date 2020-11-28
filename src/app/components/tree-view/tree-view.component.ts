@@ -30,18 +30,15 @@ export class TreeViewComponent implements AfterViewInit {
     this.eventoNodo.emit(nodo);
   }
 
+  alerta() {
+    alert('hola');
+  }
+
 
 
 
 
   ngAfterViewInit(): void {
-    // this.datosArbol[0].children = [];
-    // this.datosArbol[0].children.push({
-    //   name: 'hijo',
-    //   id: '1',
-    //   type: 'opm.object',
-    //   level: 1
-    // });
     this.dataSource.data = this.datosArbol;
   }
 
