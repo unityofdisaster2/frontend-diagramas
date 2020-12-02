@@ -1,7 +1,7 @@
 import { OnInit, Component, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
 import { dia, ui, shapes, setTheme, g, linkTools, util } from '@clientio/rappid';
 import { MongoService } from './services/mongo.service';
-import { RappidOPMUtils, OPDNode } from './utils/rappid-opm-utils';
+import { RappidOPMUtils, OPDNode, InoutStructure } from './utils/rappid-opm-utils';
 import { saveAs } from 'file-saver';
 import * as alertify from 'alertifyjs';
 import { opm, shapeConfig } from './utils/custom-shapes';
@@ -35,6 +35,8 @@ export class AppComponent implements OnInit, AfterViewInit {
   private tempGraph: dia.Graph;
   private keyboard: ui.Keyboard;
   private paper: dia.Paper;
+  private inZoomedCellReference: shapes.devs.Model;
+  private inZoomedWithPorts: shapes.devs.Model[] = [];
   private scroller: ui.PaperScroller;
   private stencil: ui.Stencil;
   private stencilDB: ui.Stencil;
@@ -60,11 +62,37 @@ export class AppComponent implements OnInit, AfterViewInit {
     // por medio de la referencia se suscribe al objeto parentCOM para
     // estar pendiente cuando emita un evento
     dialogRef.componentInstance.parentCOM.subscribe(() => {
+      let group: string;
+
+      // si el valor de tipo es 0 se considera entrada
       if (dialogRef.componentInstance.tipo === '0') {
+        group = 'in';
         elemento.model.addInPort(dialogRef.componentInstance.nombre);
-      } else if (dialogRef.componentInstance.tipo === '1') {
+
+        if (!elemento.model.attributes.inputs) {
+          elemento.model.attributes.inputs = {};
+        }
+        elemento.model.attributes.inputs[dialogRef.componentInstance.nombre] = {};
+        elemento.model.attributes.inputs[dialogRef.componentInstance.nombre].description = dialogRef.componentInstance.descripcion;
+        elemento.model.attributes.inputs[dialogRef.componentInstance.nombre].from = new Array<InoutStructure>();
+
+      } 
+      // si el vlor de tipo es 1 se considera salida
+      else if (dialogRef.componentInstance.tipo === '1') {
+        group = 'out';
         elemento.model.addOutPort(dialogRef.componentInstance.nombre);
+
+        if (!elemento.model.attributes.outputs) {
+          elemento.model.attributes.outputs = [];
+        }
+
+        elemento.model.attributes.outputs[dialogRef.componentInstance.nombre] = {};
+        elemento.model.attributes.outputs[dialogRef.componentInstance.nombre].description = dialogRef.componentInstance.descripcion;
+        elemento.model.attributes.outputs[dialogRef.componentInstance.nombre].to = new Array<InoutStructure>();
+
+
       }
+      this.updateChildPorts(elemento, dialogRef.componentInstance.nombre, group);
 
 
       if (dialogRef.componentInstance.closed) {
@@ -74,9 +102,10 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   }
   /**
-   * 
-   * @param paper 
-   * @param stencil 
+   * funcion utilizada para manejar el evento de guardado en la base de datos
+   * utilizando como apoyo una ventana de dialogo
+   * @param paper referencia del paper de jointjs
+   * @param stencil referencia del stencil que refleja los registros de la base de datos
    */
   openSaveDialog(paper: dia.Paper, stencil: ui.Stencil) {
     // se abre la ventana de dialogo y se guarda la referencia en una variable
@@ -84,8 +113,10 @@ export class AppComponent implements OnInit, AfterViewInit {
     // por medio de la referencia se suscribe al objeto parentCOM para
     // estar pendiente cuando emita un evento
     dialogRef.componentInstance.parentCOM.subscribe(() => {
+      // se capturan los datos obtenidos en la ventana de dialogo 
       const tipo = dialogRef.componentInstance.seleccionado;
       const nombre = dialogRef.componentInstance.nombre;
+
       // se llama funcion to PNG para crear una imagen con el contenido
       // actual del diagrama
       paper.toPNG((imgData) => {
@@ -97,7 +128,6 @@ export class AppComponent implements OnInit, AfterViewInit {
           this.objectMaps = {};
           this.updateStencilDB(stencil);
 
-          //this.updateStencilDB(stencil);
           alertify.success('diagrama guardado en servidor');
         }, (err) => {
           alertify.error('no se pudo establecer conexion con la base de datos');
@@ -130,6 +160,8 @@ export class AppComponent implements OnInit, AfterViewInit {
         // entries genera un iterador con los pares clave/valor, para los indices del array
         // por ello se toma el segundo y es el que se asigna a los parametros del objeto temporal
         tempObj.attributes.parametros = [params[1]];
+        tempObj.attributes.staticParams = {};
+        tempObj.attributes.staticParams.objectSubtype = 'requirement';
         // se pone al objeto temporal el nombre del parametro seleccionado
         tempObj.attr('.label/text', params[1].name);
 
@@ -140,6 +172,13 @@ export class AppComponent implements OnInit, AfterViewInit {
     return arreglo;
   }
 
+  /**
+   * funcion utilizada para realizar la busqueda del nodo de un arbol por medio
+   * de un id
+   * @param tree estructura de arbol que sera recorrido
+   * @param id identificador del nodo que se busca
+   * @returns regresa el nodo si lo encuentra, de lo contrario se devuelve undefined
+   */
   searchNode(tree: OPDNode[], id: string): OPDNode {
     for (const element of tree) {
       if (element.id === id) {
@@ -169,10 +208,97 @@ export class AppComponent implements OnInit, AfterViewInit {
         alertify.warning('no se encontro nodo al que se desea cambiar');
         return;
       }
-      this.currentID = $event.id;
       this.currentGraph.clear();
       this.currentGraph.fromJSON(nodo.jsonGraph);
+
+      this.currentID = $event.id;
+      this.updateParentPorts(this.currentGraph);
     }
+  }
+
+  updateChildPorts(element: any, portID: string, group: string) {
+    const tempNode = this.searchNode(this.OPDTree, element.model.id);
+    if (tempNode) {
+      const tempGraph = new dia.Graph({}, { cellNamespace: { opm, shapes } }).fromJSON(tempNode.jsonGraph);
+      const cells = tempGraph.getCells();
+      for (const cell of cells.entries()) {
+        if (cell[1].attributes.type === 'opm.ParentObject') {
+          const childElement = cell[1] as shapes.devs.Model;
+          if (group === 'in') {
+            childElement.addInPort(portID);
+          } else if (group === 'out') {
+            childElement.addOutPort(portID);
+          }
+          tempNode.jsonGraph = tempGraph.toJSON();
+          break;
+        }
+      }
+    }
+  }
+
+
+  // actualizacion de puertos en el padre cuando se agrega uno desde el hijo
+  updateParentPorts(graph: dia.Graph) {
+    // se obtienen la celdas del grafo actual y se recorren
+    const tempCells = graph.getCells();
+    tempCells.forEach((cell: dia.Cell) => {
+      // solo se toma en cuenta las celdas que son elementos
+      if (cell.isElement()) {
+
+        // se hace un casteo para tomar la celda como Model
+        const element = cell as shapes.devs.Model;
+        const puertos = element.getPorts();
+        // se verifica si la celda tiene puertos
+        if (puertos.length > 0) {
+          // se puede cambiar el tree por nodo actual para que sea menor el recorrido
+          const tempNode = this.searchNode(this.OPDTree, element.id.toString());
+          // se verifica si existe un nodo hijo con el id del elemento
+          if (tempNode) {
+            // creacion de grafo temporal para interactuar con el contenido del nodo hijo
+            const tempGraph = new dia.Graph({}, { cellNamespace: { opm, shapes } }).fromJSON(tempNode.jsonGraph);
+            // se obtienen las celdas del nodo hijo y se itera sobre ellas
+            const tempGraphCells = tempGraph.getCells();
+            for (const tempCell of tempGraphCells.entries()) {
+
+              // solo se toma en cuenta la celda que sea parent, es decir la que esta
+              // relacionada con el elemento que tiene in zoom
+              if (tempCell[1].attributes.type === 'opm.ParentObject') {
+                const modelCell = tempCell[1] as shapes.devs.Model;
+
+                // se obtienen los puertos de la celda
+                const childPorts = modelCell.getPorts();
+                let flag = false;
+                // se verifica si el hijo tiene mas puertos
+                if (childPorts.length > puertos.length) {
+                  // se itera sobre los puertos del elemento hijo y se verifica
+                  // si algun puerto no se encuentra en el elemento padre
+                  childPorts.forEach((p) => {
+                    flag = false;
+                    for (const val of puertos.entries()) {
+                      if (p.id === val[1].id) {
+                        flag = true;
+                        break;
+                      }
+                    }
+                    if (!flag) {
+                      if (p.group === 'in') {
+                        element.addInPort(p.id);
+                      } else if (p.group === 'out') {
+                        element.addOutPort(p.id);
+                      }
+                    }
+                  });
+                }
+                break;
+              }
+            }
+          }
+        }
+      }
+    });
+
+
+
   }
 
   initTree() {
@@ -193,11 +319,8 @@ export class AppComponent implements OnInit, AfterViewInit {
 
 
 
-
-
-
     // objeto que contiene todas las definiciones de OPM
-    const aux = new RappidOPMUtils();
+    const utils = new RappidOPMUtils();
 
 
 
@@ -238,8 +361,6 @@ export class AppComponent implements OnInit, AfterViewInit {
 
         // se utiliza como link por defecto el de resultado consumo de OPM
         return new opm.tempLink();
-        // .router('metro')
-        // .connector('jumpover');
       },
       // con esta opcion los links forzosamente deben tener un origen y destino
       linkPinning: false,
@@ -256,6 +377,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       paper,
       graph: this.currentGraph
     });
+
 
 
     // se declara variable celda que contendra el "estado" de un elemento
@@ -345,10 +467,10 @@ export class AppComponent implements OnInit, AfterViewInit {
           ct.remove();
           this.openMatDialog(elementView);
         });
-
         // accion ejecutada al presionar boton zoom
         ct.on('action:inzoom', () => {
           ct.remove();
+          // inZoomedCellReference = this.currentGraph.getCell(elementView.model.id);
           const nodoExistente = this.searchNode(this.OPDTree, elementView.model.id);
           if (nodoExistente) {
             this.changeGraphView(nodoExistente);
@@ -382,19 +504,29 @@ export class AppComponent implements OnInit, AfterViewInit {
           this.treeViewChild.updateTree(this.OPDTree);
           // se crea un arreglo de objetos conforme a los parametros del elemento
           const arreglo = this.createObjectArray(elementView) as Array<shapes.devs.Atomic>;
-          
+
           const padre = new opm.ParentObject() as shapes.devs.Coupled;
 
+          padre.resize(600, 600);
+
           // se agrega la posibilidad de crear puertos en objeto padre
-          padre.resize(400, 400);
           padre.changeInGroup(shapeConfig.inPortProps);
           padre.changeOutGroup(shapeConfig.outPortProps);
 
+          // se traspasan los puertos de la figura original a la in zoomed
+          const portArray = elementView.model.getPorts() as Array<any>;
+          portArray.forEach((port) => {
+            if (port.group === 'in') {
+              padre.addInPort(port.id);
+            } else if (port.group === 'out') {
+              padre.addOutPort(port.id);
+            }
+          });
           this.currentGraph.clear();
           console.log('antes del error');
           padre.attributes.attrs['.label'].text = elementView.model.attributes.attrs['.label'].text;
           console.log('despues del error');
-          let cont = 0;
+          let cont = 3;
           for (const el of arreglo.entries()) {
             el[1].position(cont * 100, cont * 100);
             padre.embed(el[1]);
@@ -418,52 +550,99 @@ export class AppComponent implements OnInit, AfterViewInit {
 
       // evento que escucha cuando un link es conectado
       'link:connect': (linkView, evt, elementViewConnected, magnet, arrowhead) => {
-        console.log('conectado----------------------');
-        // condicion para eliminar el link si apunta al elemento origen
+
+
+
+
+
+        // condicion para eliminar el link si el elemento apunta a si mismo (tal vez sea necesario quitarla despues)
         if (linkView.sourceView.model.id === elementViewConnected.model.id) {
           linkView.model.remove();
           return;
         } else {
+
+          // se crean atributos de salida en origen y entrada en destino
           if (!linkView.sourceView.model.attributes.outputs) {
-            linkView.sourceView.model.attributes.outputs = {};
+            linkView.sourceView.model.attributes.outputs = [];
           }
           if (!elementViewConnected.model.attributes.inputs) {
-            elementViewConnected.model.attributes.inputs = {};
+            elementViewConnected.model.attributes.inputs = [];
           }
 
-          if ((linkView.sourceView.model.attributes.type === 'opm.Object') &&
-            (elementViewConnected.model.attributes.type === 'opm.Object')) {
-            console.log('objeto a objeto');
-          }
-          else if ((linkView.sourceView.model.attributes.type === 'opm.Object') &&
-            (elementViewConnected.model.attributes.type === 'opm.Process')) {
-            console.log('objeto a proceso');
-            const newLink = new opm.ResultConsumptionLink()
-              .router('metro')
-              .connector('jumpover');
-            if (linkView.sourceView.model.attributes.objectSubtype === 'padre') {
-              newLink.attr('line/stroke', '#FF2424');
-              newLink.appendLabel({
-                attrs: {
-                  text: {
-                    text: 'req'
+          // se crea nuevo link para sustituir al que se crea de manera inicial
+          const newLink = new opm.ResultConsumptionLink()
+          .router('metro')
+          .connector('jumpover');
+
+          // condicion utilizada cuando el origen es del tipo objeto
+          if (linkView.sourceView.model.attributes.type === 'opm.Object') {
+            if (linkView.sourceView.model.attributes.staticParams) {
+              // se verifica si el objeto es externo o un requerimmiento
+              if (linkView.sourceView.model.attributes.staticParams.objectSubtype === 'externo'
+              || linkView.model.get('source').port) {
+                // formato de link para establecer que se trata de un input externo
+                newLink.attr('line/stroke', '#62FC6A');
+                newLink.appendLabel({
+                  attrs: {
+                    text: {
+                      text: 'in'
+                    }
+                  }
+                });
+
+                // todo: asociar lo necesario en los objetos de inputs y outputs
+                // tanto en objeto como proceso se debe guardar en la coleccion inputs y outputs
+
+                if (linkView.model.get('source').port) {
+                  newLink.source({id: linkView.sourceView.model.id, port: linkView.model.get('source').port});
+                } else {
+                  newLink.source(linkView.sourceView.model);
+                }
+
+                if (linkView.model.get('target').port) {
+                  newLink.target({id: elementViewConnected.model.id, port: linkView.model.get('target').port});
+                } else {
+                  newLink.target(elementViewConnected.model);
+                }
+
+              } else if (linkView.sourceView.model.attributes.staticParams.objectSubtype === 'requirement') {
+                // se asegura que esta relacion sea unicamente con un proceso
+                if (elementViewConnected.model.attributes.type === 'opm.Object') {
+                  alertify.error('no se puede asociar requerimientos entre objetos');
+                  linkView.model.remove();
+                  return;
+                }
+                // formato de link para establecer que se trata de un requerimiento
+                newLink.attr('line/stroke', '#FF2424');
+                newLink.appendLabel({
+                  attrs: {
+                    text: {
+                      text: 'req'
+                    }
+                  }
+                });
+                newLink.source(linkView.sourceView.model);
+                newLink.target(elementViewConnected.model);
+
+              }
+            }
+            // por el momento para esta condicion solo se aceptara cuando el puerto es output
+            else if (linkView.model.get('source').port) {
+              const tempObject = linkView.sourceView.model as shapes.devs.Model;
+              const portArray = tempObject.getPorts();
+              for (const p of portArray) {
+                if (linkView.model.get('source').port === p.id) {
+                  if(p.id === 'out') {
+                    
+                  }
+                  else {
+                    alertify.error('el puerto origen debe ser una salida');
+                    linkView.model.remove();
+                    return;
                   }
                 }
-              });
-
-              // se agrega relacion de objeto con proceso por medio de la propiedad processes
-              // en el objeto y la propiedad requirements en el proceso
-              if (!linkView.sourceView.model.attributes.processes) {
-                linkView.sourceView.model.attributes.processes = {};
               }
-              console.log(elementViewConnected.model);
-              linkView.sourceView.model.attributes.processes[elementViewConnected.model.id]
-                = elementViewConnected.model.attributes.attrs.label.text;
-
-
-
-
-            } else if (linkView.sourceView.model.attributes.objectSubtype === 'externo') {
+              
               newLink.attr('line/stroke', '#62FC6A');
               newLink.appendLabel({
                 attrs: {
@@ -472,29 +651,37 @@ export class AppComponent implements OnInit, AfterViewInit {
                   }
                 }
               });
-            } else if (!linkView.sourceView.model.attributes.objectSubtype ||
-              linkView.sourceView.model.attributes.objectSubtype === '') {
-              alertify.error('debe seleccionar un subtipo');
+
+              // todo: asociar lo necesario en los objetos de inputs y outputs
+              // tanto en objeto como proceso se debe guardar en la coleccion inputs y outputs
+
+              if (linkView.model.get('source').port) {
+                newLink.source({id: linkView.sourceView.model.id, port: linkView.model.get('source').port});
+              } else {
+                newLink.source(linkView.sourceView.model);
+              }
+
+              if (linkView.model.get('target').port) {
+                newLink.target({id: elementViewConnected.model.id, port: linkView.model.get('target').port});
+              } else {
+                newLink.target(elementViewConnected.model);
+              }
+            }
+            else {
+              alertify.error('se debe especificar un subtipo o arrastrar desde un puerto');
               linkView.model.remove();
-              newLink.remove();
               return;
             }
-            newLink.source(linkView.sourceView.model);
-            newLink.target(elementViewConnected.model);
+
             this.currentGraph.addCell(newLink);
             linkView.model.remove();
 
 
-            // todo: comportamiento cuando un link apunta de objeto a proceso
-          } else if ((linkView.sourceView.model.attributes.type === 'opm.Process') &&
-            (elementViewConnected.model.attributes.type === 'opm.Process')) {
-            console.log('proceso a proceso');
-            // todo: comportamiento cuando un link apunta de proceso a proceso
-          }
-          else if ((linkView.sourceView.model.attributes.type === 'opm.Process') &&
-            (elementViewConnected.model.attributes.type === 'opm.Object')) {
-            console.log('proceso a objeto');
-            // todo: comportamiento cuando un link apunta de proceso a objeto
+
+          } else if (linkView.sourceView.model.attributes.type === 'opm.ParentObject') {
+
+          } else if (linkView.sourceView.model.attributes.type === 'opm.Process') {
+
           }
         }
 
@@ -503,8 +690,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         // el elemento origen
         linkView.sourceView.model.attr('body/opacity', 'none');
 
-        // personalizar para los casos cuando se conecta de objeto a objeto / proceso
-        // o de proceso a proceso / objeto
+
       },
 
 
@@ -555,8 +741,8 @@ export class AppComponent implements OnInit, AfterViewInit {
           }
           else {
             console.log('si llega');
-            
-            
+
+
             this.currentGraph.removeCells([celda]);
           }
         }
@@ -589,7 +775,9 @@ export class AppComponent implements OnInit, AfterViewInit {
 
 
 
-    const circ = new opm.Process().resize(300, 150);
+    const circ = new opm.Process().resize(300, 150) as shapes.devs.Atomic;
+    circ.changeInGroup(shapeConfig.inPortProps);
+    circ.changeOutGroup(shapeConfig.outPortProps);
     // declaracion de paleta que contendra los elementos basicos de OPM
     const stencil = this.stencil = this.stencilServ.createOPMStencil(scroller);
 
@@ -635,35 +823,35 @@ export class AppComponent implements OnInit, AfterViewInit {
               console.log(tempTree[0].jsonGraph);
               console.log(this.tempGraph);
               const celdas = this.tempGraph.getCells();
+
+
+              /*
+              se encontro un conflicto cuando se utilizaba el metodo this.currentGraph.clear()
+              ya que al hacerlo no desaparecia la figura arrastrada del stencil tanto en pantalla
+              como en las propiedades del grafo. Se soluciona temporalmente igualando la propiedad
+              graph de una figura existente con la de la celda ya que por alguna razon esta se marcaba
+              como null cuando se llamaba a clear.
+              */
               const figura = new opm.Process();
-              figura.position(250, 250);
-              figura.attributes.size.width = 150;
-              figura.attributes.size.height = 80;
               celdas.forEach((dataCell) => {
-                console.log('dentro de foreach');
                 dataCell.graph = figura.graph;
               });
 
-              this.currentGraph.addCell(figura);
+              //this.currentGraph.addCell(figura);
               this.currentGraph.addCells(celdas);
-              // if (element.group === 'Componentes') {
-              //   const tempTree = JSON.parse(element.grafo) as OPDNode[];
-              //   const tempGraph = new dia.Graph({}, {
-              //     cellNamespace: { opm, shapes }
-              //   });
-              //   console.log('arbol temporal', tempTree);
-              //   tempGraph.fromJSON(tempTree[0].jsonGraph);
-              //   const celdas = tempGraph.getCells();
-              //   this.currentGraph.addCells(celdas);
-              //   if (tempTree[0].children) {
-              //     if (!this.OPDTree[0].children) {
-              //       this.OPDTree[0].children = new Array<OPDNode>();
-              //     }
-              //     for (const node of tempTree[0].children) {
-              //       this.OPDTree[0].children.push(node);
-              //     }
-              //   }
-              // }
+              if (tempTree[0].children) {
+                const currentNode = this.searchNode(this.OPDTree, this.currentID);
+                if (tempTree[0].children) {
+                  if (!currentNode.children) {
+                    currentNode.children = new Array<OPDNode>();
+                  }
+                  for (const child of tempTree[0].children) {
+                    currentNode.children.push(child);
+                  }
+                }
+
+              }
+
             }
 
             this.treeViewChild.updateTree(this.OPDTree);
@@ -878,7 +1066,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.globalInspector.remove();
       }
       // se crea inspector y se guarda instancia en el atributo global
-      this.globalInspector = aux.createInspector(elementView);
+      this.globalInspector = utils.createInspector(elementView);
     });
 
 
@@ -911,7 +1099,7 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.mongo.getRegistros().subscribe((data: Array<any>) => {
       // se guarda el arreglo de registros obtenidos de mongo
       this.objectMaps = data;
-      
+
       for (const element of data) {
         // se extrae la imagen que contiene cada elemento de la base de datos
         // y se crea una figura 
@@ -938,7 +1126,7 @@ export class AppComponent implements OnInit, AfterViewInit {
           imgAux
         );
       }
-      
+
       // se ajustan las dimensiones del contenedor de grupos conforme al numero de elementos
       // que pertenezcan a ellos
       stencil.options.groups.Componentes.height = 120 * Math.ceil(dbGroups.Componentes.length / 2);

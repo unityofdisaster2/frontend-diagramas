@@ -88,7 +88,7 @@ export class RappidOPMUtils {
                             type: 'select',
                             label: 'subtype',
                             index: 3,
-                            options: ['', 'padre', 'externo'],
+                            options: ['', 'requirement', 'externo'],
                             group: 'objectGroup'
                         },
                         modelType: {
@@ -303,4 +303,18 @@ export interface dbModel {
     image: any;
     group: string;
     name: string;
+}
+
+export interface InoutStructure {
+    // input | output
+    type: string;
+    // magnet | port
+    connection: string;
+    // id del link
+    linkID: string;
+    // id del elemento de entrada o salida
+    elementID: string;
+    // si es externo pasa su parametro, si viene de un puerto se procesa despues
+    // y se agrega como valor numerico
+    value?: any;
 }

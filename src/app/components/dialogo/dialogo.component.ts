@@ -12,12 +12,14 @@ export class DialogoComponent implements OnInit {
 
   tipo: string;
   nombre: string;
+  descripcion: string;
   closed: boolean;
   parentCOM = new EventEmitter();
 
   constructor(public dialog: MatDialog) {
     this.tipo = '0';
     this.nombre = '';
+    this.descripcion = '';
   }
 
 
@@ -27,7 +29,11 @@ export class DialogoComponent implements OnInit {
   onSendValues() {
     if (this.nombre === ''){
       alertify.error('ingrese un valor en el nombre');
-    } else {
+    }
+    else if (this.descripcion === '') {
+      alertify.error('ingrese una descripcion');
+    }
+    else {
       this.closed = true;
       this.parentCOM.emit();
     }

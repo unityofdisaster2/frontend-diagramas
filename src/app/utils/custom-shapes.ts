@@ -65,7 +65,6 @@ export const opm = {
                 strokeWidth: 4,
                 fill: '#FFFFFF',
                 stroke: '#62FC6A',
-                magnet: true,
                 filter: {
                     name: 'dropShadow',
                     args: {
@@ -93,10 +92,9 @@ export const opm = {
         }],
     }),
 
-    // definicion de la figura que representara al elemento proceso
-    Process: joint.dia.Element.define('opm.Process', {
+    Process: joint.shapes.devs.Atomic.define('opm.Process', {
         attrs: {
-            body: {
+            '.body': {
                 // configuracion para generar un elipse como body
                 refRx: '50%',
                 refRy: '50%',
@@ -110,6 +108,14 @@ export const opm = {
                 stroke: '#4FC8FE',
                 strokeWidth: 4,
                 magnet: true,
+                filter: {
+                    name: 'dropShadow',
+                    args: {
+                        dx: 2,
+                        dy: 2,
+                        blur: 3
+                    }
+                }
             },
             subbody: {
                 refRx: '40%',
@@ -123,7 +129,47 @@ export const opm = {
                 fill: 'transparent',
                 stroke: 'transparent',
             },
-            label: {
+            '.label': {
+                text: 'Proceso',
+                fontSize: 20,
+            }
+        },
+        markup: [
+            {
+                tagName: 'ellipse',
+                selector: '.body'
+            },
+            {
+                tagName: 'ellipse',
+                selector: 'subbody'
+            },
+            {
+                tagName: 'text',
+                selector: '.label'
+            }
+
+        ],
+    }),
+
+
+    // definicion de la figura que representara al elemento proceso
+    ParentProcess: joint.shapes.devs.Coupled.define('opm.ParentProcess', {
+        attrs: {
+            '.body': {
+                // configuracion para generar un elipse como body
+                refRx: '50%',
+                refRy: '50%',
+                refCx: '1%',
+                refCy: 0,
+                refX: '50%',
+                refY: '50%',
+                refWidth: '100%',
+                refHeight: '100%',
+                fill: '#FFFFFF',
+                stroke: '#4FC8FE',
+                strokeWidth: 4,
+            },
+            '.label': {
                 text: 'Proceso',
                 fontSize: 20,
                 textVerticalAnchor: 'middle',
@@ -135,15 +181,11 @@ export const opm = {
         markup: [
             {
                 tagName: 'ellipse',
-                selector: 'body'
-            },
-            {
-                tagName: 'ellipse',
-                selector: 'subbody'
+                selector: '.body'
             },
             {
                 tagName: 'text',
-                selector: 'label'
+                selector: '.label'
             }
 
         ],
