@@ -23,7 +23,7 @@ export class RappidOPMUtils {
             return ui.Inspector.create('.inspector-container', {
                 cell: elementView.model,
                 inputs: {
-                    'attrs/label/text': {
+                    'attrs/.label/text': {
                         type: 'text',
                         label: 'name',
                         group: 'processGroup',
@@ -32,20 +32,7 @@ export class RappidOPMUtils {
                     },
                     // creacion de estructura personalzizada para un proceso
                     parametros: {
-                        // text: {
-                        //     type: 'list',
-                        //     label: 'requirements',
-                        //     group: 'paramGroup',
-                        //     index: 4,
-                        //     item: {
-                        //         type: 'object',
-                        //         label: 'requirements',
-                        //         properties: {
-                        //             name: { type: 'text', label: 'name' },
-                        //             nomenclature: { type: 'text', label: 'nomenclature' }
-                        //         }
-                        //     }
-                        // },
+
                         tipo: {
                             type: 'select',
                             label: 'type',
@@ -140,7 +127,7 @@ export class RappidOPMUtils {
                                     label: 'value',
                                     when: {
                                         eq: {
-                                            'parametros/${index}/type': 'Constant'
+                                            'parametros/${index}/type': 'subtypeonstant'
                                         }
                                     }
                                 },

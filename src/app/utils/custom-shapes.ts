@@ -57,7 +57,7 @@ export const opm = {
         }],
     }),
 
-    ParentObject: joint.shapes.devs.Coupled.define('opm.ParentObject', {
+    ChildObject: joint.shapes.devs.Coupled.define('opm.ChildObject', {
         attrs: {
             '.body': {
                 refWidth: '100%',
