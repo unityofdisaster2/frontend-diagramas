@@ -31,7 +31,7 @@ export class StencilService {
   createDBStencil(scroller: ui.PaperScroller): ui.Stencil {
     return new ui.Stencil({
       paper: scroller,
-      label: 'coleccion de diagramas',
+      label: 'diagram collection',
       scaleClones: true,
       width: 200,
       groups: {

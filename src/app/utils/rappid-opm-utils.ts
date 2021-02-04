@@ -38,7 +38,7 @@ export class RappidOPMUtils {
                             label: 'type',
                             group: 'paramGroup',
                             index: 5,
-                            options: ['SolidWorks', 'Simulink', 'COMSOL MP']
+                            options: ['SolidWorks', 'Simulink', 'COMSOL_MP']
                         },
                         reference: {
                             type: 'text',
@@ -127,7 +127,7 @@ export class RappidOPMUtils {
                                     label: 'value',
                                     when: {
                                         eq: {
-                                            'parametros/${index}/type': 'subtypeonstant'
+                                            'parametros/${index}/type': 'Constant'
                                         }
                                     }
                                 },
@@ -244,34 +244,7 @@ export class RappidOPMUtils {
         }
     }
 
-    createInoutInspector(elementView: dia.ElementView): ui.Inspector {
-        return ui.Inspector.create('.inspector-container', {
-            cell: elementView.model,
-            inputs: {
-                'attrs/label/text': {
-                    type: 'text',
-                    label: 'nombre',
-                    index: 2,
-                    group: 'objectGroup'
-                },
-            },
-            groups: {
-                // se crean grupos para mostrar de forma ordenada el formulario del inspector
-                paramGroup: {
-                    label: 'lista de parametros',
-                    index: 4
-                },
-                objectGroup: {
-                    label: 'Salidas',
-                    index: 1
-                },
-                elementGroup: {
-                    label: 'listElement',
-                    index: 8
-                }
-            }
-        });
-    }
+
 
 }
 
@@ -291,17 +264,16 @@ export interface dbModel {
     group: string;
     name: string;
 }
-
-export interface InoutStructure {
-    // input | output
-    type: string;
-    // magnet | port
-    connection: string;
-    // id del link
-    linkID: string;
-    // id del elemento de entrada o salida
+/**
+ * descripcion de la interfaz
+ * @interface
+ */
+export interface InOutStructure {
     elementID: string;
-    // si es externo pasa su parametro, si viene de un puerto se procesa despues
-    // y se agrega como valor numerico
-    value?: any;
+    name: string;
+    port?: string; // opcional poner id de puerto origen
+    parent?: string // opcional, solo usar con procesos
+    type: string; // tipo: externo, objeto, proceso
 }
+
+

@@ -1,0 +1,17 @@
+-   modificación en propiedades de objetos y procesos para que puedan
+    manejar inputs y outputs.
+
+-   se agrega función para verificar si un puerto pertenece al grupo de entrada o salida.
+
+-   se modifica la forma en la que se hace el paso de parámetros cuando se conecta un elemento
+    con otro a través de un link.
+
+
+-   se agrega fragmento de código para mostrar al usuario una ventana con los resultados numéricos
+    de la ejecución.
+
+-   En archivo mongo.service.ts se crea función para filtrar contenido de la estructura de árbol
+    que contiene la jerarquía del diagrama y extraer solo los datos más importantes que serán 
+    transmitidos a Matlab.
+
+-   En mongo.service.ts se agrega la petición para enviar el objeto filtrado al backend.

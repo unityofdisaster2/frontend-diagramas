@@ -41,7 +41,7 @@ import { MatMenuModule } from '@angular/material/menu';
     MatIconModule,
     MatProgressBarModule,
     MatChipsModule,
-    MatMenuModule
+    MatMenuModule,
   ],
   providers: [],
   bootstrap: [AppComponent]

@@ -1,7 +1,7 @@
 import { OnInit, Component, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
 import { dia, ui, shapes, setTheme, g, linkTools, util } from '@clientio/rappid';
 import { MongoService } from './services/mongo.service';
-import { RappidOPMUtils, OPDNode, InoutStructure } from './utils/rappid-opm-utils';
+import { RappidOPMUtils, OPDNode, InOutStructure } from './utils/rappid-opm-utils';
 import { saveAs } from 'file-saver';
 import * as alertify from 'alertifyjs';
 import { opm, shapeConfig } from './utils/custom-shapes';
@@ -12,7 +12,8 @@ import { cloneDeep, isString } from 'lodash';
 import { TreeViewComponent } from './components/tree-view/tree-view.component';
 import { DialogoSaveComponent } from './components/dialogo-save/dialogo-save.component';
 import { StencilService } from './services/stencil.service';
-
+import { HttpErrorResponse } from '@angular/common/http';
+import Swal from 'sweetalert2';
 
 
 @Component({
@@ -66,10 +67,10 @@ export class AppComponent implements OnInit, AfterViewInit {
       if (dialogRef.componentInstance.tipo === '0') {
         group = 'in';
         elemento.model.addInPort(dialogRef.componentInstance.nombre);
-
         elemento.model.prop(`inputs/${dialogRef.componentInstance.nombre}`, {});
-        elemento.model.get('inputs')[dialogRef.componentInstance.nombre].description = dialogRef.componentInstance.descripcion;
-        elemento.model.get('inputs')[dialogRef.componentInstance.nombre].from = new Array<any>();
+        elemento.model.prop(`inputs/${dialogRef.componentInstance.nombre}/from`, []);
+        elemento.model.prop(`inputs/${dialogRef.componentInstance.nombre}/to`, []);
+        elemento.model.prop(`inputs/${dialogRef.componentInstance.nombre}/values`, []);
 
       }
       // si el valor de tipo es 1 se considera salida
@@ -77,16 +78,10 @@ export class AppComponent implements OnInit, AfterViewInit {
         group = 'out';
         elemento.model.addOutPort(dialogRef.componentInstance.nombre);
 
-
         elemento.model.prop(`outputs/${dialogRef.componentInstance.nombre}`, {});
-        elemento.model.get('outputs')[dialogRef.componentInstance.nombre].description = dialogRef.componentInstance.descripcion;
-        elemento.model.get('outputs')[dialogRef.componentInstance.nombre].to = new Array<InoutStructure>();
-
-
-        // elemento.model.attributes.outputs[dialogRef.componentInstance.nombre] = {};
-        // elemento.model.attributes.outputs[dialogRef.componentInstance.nombre].description = dialogRef.componentInstance.descripcion;
-        // elemento.model.attributes.outputs[dialogRef.componentInstance.nombre].to = new Array<InoutStructure>();
-
+        elemento.model.prop(`outputs/${dialogRef.componentInstance.nombre}/values`, []);
+        elemento.model.prop(`outputs/${dialogRef.componentInstance.nombre}/from`, []);
+        elemento.model.prop(`outputs/${dialogRef.componentInstance.nombre}/to`, []);
 
       }
       this.updateChildPorts(elemento.model.id, dialogRef.componentInstance.nombre, group);
@@ -141,7 +136,8 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   /**
    * funcion utiizada para crear un arreglo de objetos conforme al numero
-   * de parametros que tenga un elemento 'opm.object'
+   * de parametros que tenga un elemento 'opm.object' (utilizado principalmente para 
+   * convertir los parametros en objetos 'hijo')
    * @param el modelo del elemento seleccionado
    * @returns arreglo de objetos
    */
@@ -150,15 +146,17 @@ export class AppComponent implements OnInit, AfterViewInit {
     // se verifica la existencia del atributo parametros. En caso de
     // encontrarlo se itera sobre las entradas de su arreglo
 
-    if (el.model.attributes.parametros !== undefined) {
-      for (const params of el.model.attributes.parametros.entries()) {
+    if (el.model.get('parametros')) {
+      // entries genera un iterador con los pares clave/valor, para los indices del array
+      // por ello se toma el segundo y es el que se asigna a los parametros del objeto temporal      
+      for (const params of el.model.get('parametros').entries()) {
 
         const tempObj = new opm.Object() as shapes.devs.Atomic;
-        // entries genera un iterador con los pares clave/valor, para los indices del array
-        // por ello se toma el segundo y es el que se asigna a los parametros del objeto temporal
-        tempObj.attributes.parametros = [params[1]];
-        tempObj.attributes.staticParams = {};
-        tempObj.attributes.staticParams.objectSubtype = 'requirement';
+
+        tempObj.prop('parametros', [params[1]]);
+        tempObj.prop('staticParams', {});
+        tempObj.get('staticParams').objectSubtype = 'requirement';
+        // tempObj.attributes.staticParams.objectSubtype = 'requirement';
         // se pone al objeto temporal el nombre del parametro seleccionado
         tempObj.attr('.label/text', params[1].name);
 
@@ -323,6 +321,15 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.currentID = 'root';
   }
 
+  portBelongsToGroup(elementModel: shapes.devs.Model, portID: string, portGroup: string) {
+    const filteredPort = elementModel.getGroupPorts(portGroup).filter((elementPort) => elementPort.id === portID).pop();
+    if (filteredPort) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
 
 
   public ngOnInit(): void {
@@ -480,7 +487,6 @@ export class AppComponent implements OnInit, AfterViewInit {
         // accion ejecutada al presionar boton zoom
         ct.on('action:inzoom', () => {
           ct.remove();
-          // inZoomedCellReference = this.currentGraph.getCell(elementView.model.id);
           const nodoExistente = this.searchNode(this.OPDTree, elementView.model.id);
           if (nodoExistente) {
             this.changeGraphView(nodoExistente);
@@ -495,13 +501,14 @@ export class AppComponent implements OnInit, AfterViewInit {
           if (nodoActual.children === undefined) {
             nodoActual.children = [];
           }
-          elementView.model.attributes.isParent = true;
+          elementView.model.prop('isParent', true);
           nodoActual.jsonGraph = this.currentGraph.toJSON();
-          elementView.model.prop('isParent', false);
+          
           // se crea nodo hijo con los valores del objeto seleccionado
           nodoActual.children.push({
             // se selecciona el nombre del objeto
-            name: elementView.model.attributes.attrs['.label'].text,
+            name: elementView.model.attr('.label/text'),
+            // name: elementView.model.attributes.attrs['.label'].text,
             // se utiliza como id el generado automaticamente por el framework
             id: elementView.model.id,
 
@@ -524,19 +531,26 @@ export class AppComponent implements OnInit, AfterViewInit {
           padre.changeOutGroup(shapeConfig.outPortProps);
           padre.prop('inputs', {});
           padre.prop('outputs', {});
+          padre.prop('parentID', elementView.model.id);
           // se traspasan los puertos de la figura original a la in zoomed
-          const portArray = elementView.model.getPorts() as Array<any>;
+          const portArray = elementView.model.getPorts() as Array<dia.Element.Port>;
           portArray.forEach((port) => {
             if (port.group === 'in') {
               padre.addInPort(port.id);
+              padre.prop(`inputs/${port.id}`, {});
+              padre.prop(`inputs/${port.id}/values`, []);
+              padre.prop(`inputs/${port.id}/from`, []);
+              padre.prop(`inputs/${port.id}/to`, []);
             } else if (port.group === 'out') {
               padre.addOutPort(port.id);
+              padre.prop(`outputs/${port.id}`, {});
+              padre.prop(`outputs/${port.id}/values`, []);
+              padre.prop(`outputs/${port.id}/from`, []);
+              padre.prop(`outputs/${port.id}/to`, []);
             }
           });
-          this.currentGraph.clear();
-          console.log('antes del error');
-          padre.attributes.attrs['.label'].text = elementView.model.attributes.attrs['.label'].text;
-          console.log('despues del error');
+          padre.attr('.label/text', elementView.model.attr('.label/text'));
+          // padre.attributes.attrs['.label'].text = elementView.model.attributes.attrs['.label'].text;
           let cont = 3;
           for (const el of arreglo.entries()) {
             el[1].position(cont * 100, cont * 100);
@@ -545,17 +559,27 @@ export class AppComponent implements OnInit, AfterViewInit {
           }
           padre.position(250, 250);
 
-          this.currentGraph.addCell(padre);
-          this.currentGraph.addCells(arreglo);
+          // se inserta objeto padre al inicio del arreglo 
+          arreglo.splice(0, 0, padre);
+          // arreglo.reverse();
+          // this.currentGraph.addCell(padre);
+          const tempGraph = new dia.Graph({}, {cellNamespace: {
+            opm, shapes
+          }});
+          tempGraph.addCells(arreglo);
+          // this.currentGraph.clear();
+          // por alguna razon si se hace directo el addcells sobre currentGraph
+          // en lugar de hacerlo en un grafo temporal, sale un error
+          this.currentGraph.fromJSON(tempGraph.toJSON());
 
         });
       },
 
       // evento que escucha cuando un link es desconectado
       'link:disconnect': (linkView, evt, elementViewConnected, magnet, arrowhead) => {
+        // todo: borrar toda referencia de que el origen apunto al destino 
         console.log('desconectado----------------------');
-        // console.log(linkView);
-        // console.log(elementViewConnected);
+
 
       },
 
@@ -572,31 +596,166 @@ export class AppComponent implements OnInit, AfterViewInit {
           return;
         } else {
 
-          // se crean atributos de salida en origen y entrada en destino
-          // if (!linkView.sourceView.model.attributes.outputs) {
-          //   linkView.sourceView.model.attributes.outputs = [];
-          // }
-          // if (!elementViewConnected.model.attributes.inputs) {
-          //   elementViewConnected.model.attributes.inputs = [];
-          // }
+
 
           // se crea nuevo link para sustituir al que se crea de manera inicial
           let newLink = new opm.ResultConsumptionLink()
           .router('metro')
           .connector('jumpover');
-
+          let auxInput: InOutStructure;
+          let auxOutput: InOutStructure;
           // condicion utilizada cuando el origen es del tipo objeto
 
 
           /**nota: falta agregar el caso cuando el destino es el puerto de un ParentObject
            * aparentemente no es necesario, pero puede haber problemas
            */
+
           if (linkView.sourceView.model.attributes.type === 'opm.Object') {
-            if (linkView.sourceView.model.attributes.staticParams) {
-              // se verifica si el objeto es externo o un requerimmiento
-              if (linkView.sourceView.model.attributes.staticParams.objectSubtype === 'externo'
-              || linkView.model.get('source').port) {
-                // formato de link para establecer que se trata de un input externo
+            // se verifica si el objeto es del subtipo externo o requirement
+            if (linkView.model.get('source').port) {
+              newLink.attr('line/stroke', '#62FC6A');
+              newLink.appendLabel({
+                attrs: {
+                  text: {
+                    text: 'in'
+                  }
+                }
+              });
+              // verificar que el puerto del elemento origen sea salida
+              if (this.portBelongsToGroup(
+                linkView.sourceView.model as shapes.devs.Model,
+                linkView.model.get('source').port,
+                'out'
+                )) {
+                  
+                  newLink.source(linkView.model.source());
+                  // se checa el caso donde el destino es objeto
+                  if (elementViewConnected.model.attributes.type === 'opm.Object' ||
+                  elementViewConnected.model.attributes.type === 'opm.ChildObject'
+                  ) {
+                    
+                    // se verifica que el objeto destino tenga puerto
+                    if (!linkView.model.get('target').port) {
+                      alertify.error('la conexion solo se puede dirigir hacia un puerto de entrada del objeto');
+                      linkView.model.remove();
+                      return;
+                    } else {
+                      // se verifica que el puerto destino sea una entrada
+                      if (this.portBelongsToGroup(
+                        elementViewConnected.model as shapes.devs.Model,
+                        linkView.model.get('target').port,
+                        'in')) {
+                          // se checan dos casos, si el destino es objeto el link se debe dirigir
+                          // hacia una entrada, si el destino es ChildObject el unico destino debe
+                          // ser un puerto de salida
+                          if (elementViewConnected.model.attributes.type === 'opm.Object') {
+                            auxInput = {
+                              elementID: linkView.sourceView.model.id,
+                              type: linkView.sourceView.model.attributes.type,
+                              port: linkView.model.get('source').port,
+                              name: linkView.sourceView.model.attr('.label/text')
+                            };
+                            elementViewConnected.model.get('inputs')[linkView.model.get('target').port]
+                              .from.push(auxInput);
+
+                            // elementViewConnected.model.get('inputs')[linkView.model.get('target').port].push(auxInput);
+
+
+                            auxOutput = {
+                              elementID: elementViewConnected.model.id,
+                              type: elementViewConnected.model.attributes.type,
+                              port: linkView.model.get('target').port,
+                              name: elementViewConnected.model.attr('.label/text')
+                            };
+
+                            linkView.sourceView.model.get('outputs')[linkView.model.get('source').port]
+                              .to.push(auxOutput);
+                            // linkView.sourceView.model.get('outputs')[linkView.model.get('source').port].push(auxOutput);
+
+
+                            newLink.target(linkView.model.target());
+                          } else {
+
+                            alertify.error('no se puede realizar la conexion');
+                            linkView.model.remove();
+                            return;
+                          }
+                          
+                        } else {
+                          if (elementViewConnected.model.attributes.type === 'opm.ChildObject') {
+                            auxOutput = {
+                              // referencia al ID del padre
+                              elementID: this.currentID,
+                              type: elementViewConnected.model.attributes.type,
+                              port: linkView.model.get('target').port,
+                              name: elementViewConnected.model.attr('.label/text'),
+                            };
+
+                            linkView.sourceView.model.get('outputs')[linkView.model.get('source').port]
+                              .to.push(auxOutput);
+
+                            // linkView.sourceView.model.get('outputs')[linkView.model.get('source').port].push(auxOutput);
+
+
+                            // aqui deberia ir el input,
+                            auxInput = {
+                              elementID: linkView.sourceView.model.id,
+                              type: linkView.sourceView.model.attributes.type,
+                              port: linkView.model.get('source').port,
+                              name: linkView.sourceView.model.attr('.label/text')
+                            };
+                            // aunque se dirige a un puerto output se guarda la referencia en el objeto inputs
+
+                            elementViewConnected.model.get('outputs')[linkView.model.get('target').port]
+                              .from.push(auxInput);
+                            // elementViewConnected.model.get('inputs')[linkView.model.get('target').port].push(cloneDeep(auxInput));
+
+
+
+                            newLink.target(linkView.model.target());
+                          } else {
+                            alertify.error('el puerto destino debe ser de entrada');
+                            linkView.model.remove();
+                            return;
+                          }
+
+                        }
+                    }
+                  } else if (elementViewConnected.model.attributes.type === 'opm.Process') {
+                    // recuerda va de el puerto de un objeto al input de in proceso
+
+                    auxInput = {
+                      elementID: linkView.sourceView.model.id,
+                      port: linkView.model.get('source').port,
+                      type: linkView.sourceView.model.attributes.type,
+                      name: linkView.sourceView.model.attr('.label/text')
+                    };
+                    elementViewConnected.model.get('inputs').from.push(auxInput);
+
+                    auxOutput = {
+                      elementID: elementViewConnected.model.id,
+                      parent: this.currentID,
+                      type: elementViewConnected.model.attributes.type,
+                      name: elementViewConnected.model.attr('.label/text')
+
+                    }
+                    linkView.sourceView.model.get('outputs')[linkView.model.get('source').port]
+                      .to.push(auxOutput);
+
+                    newLink.target(linkView.model.target());
+                  }
+
+                } else {
+                  alertify.error('el origen debe ser un puerto salida');
+                  linkView.model.remove();
+                  return;
+                }
+
+            } 
+
+            else if (linkView.sourceView.model.attributes.staticParams) {
+              if (linkView.sourceView.model.attributes.staticParams.objectSubtype === 'externo') {
                 newLink.attr('line/stroke', '#62FC6A');
                 newLink.appendLabel({
                   attrs: {
@@ -605,85 +764,62 @@ export class AppComponent implements OnInit, AfterViewInit {
                     }
                   }
                 });
+                newLink.source(linkView.model.source());
+
+                // si el destino es objeto solo es posible conectarlo hacia un puerto
                 if (elementViewConnected.model.attributes.type === 'opm.Object') {
                   if (!linkView.model.get('target').port) {
-                    alertify.error('el link se debe dirigir a un puerto en el objeto destino');
+                    alertify.error('el objeto externo solo se puede conectar a puertos de otros objetos');
                     linkView.model.remove();
                     return;
                   } else {
-                    const targetObject =  elementViewConnected.model as shapes.devs.Model;
-                    const targetPortID = linkView.model.get('target').port;
-                    const targetPort = targetObject.getGroupPorts('out').filter((pOut) => pOut.id === targetPortID).pop();
-                    if (targetPort) {
-                      alertify.error('no se puede asociar outputs con outputs');
-                      linkView.model.remove();
-                      return;
-                    } else {
-                      if (linkView.model.get('source').port) {
-                        elementViewConnected.model.get('inputs')[targetPort.id].from.push({
-                          type: 'port',
-                          name: linkView.model.get('source').port,
-                          id: linkView.sourceView.model.id,
-                          value: 0
-                        });
+                    // se verifica si el puerto destino es una salida, en dicho caso se
+                    // muestra un error, de lo contrario se asocia el link con el puerto
+                    if (this.portBelongsToGroup(
+                      elementViewConnected.model as shapes.devs.Model,
+                      linkView.model.get('target').port,
+                      'out')) {
+                        alertify.error('no se puede asociar elemento externo con puerto de salida');
+                        linkView.model.remove();
+                        return;
                       } else {
-                        elementViewConnected.model.get('inputs')[linkView.model.get('target').port].from.push({
-                          type: 'opm.Object',
+                        // conexion exitosa de objeto externo con puerto de otro objeto
+                        
+                        auxInput = {
+                          elementID: linkView.sourceView.model.id,
+                          type: 'externo',
                           name: linkView.sourceView.model.attr('.label/text'),
-                          id: linkView.sourceView.model.id,
-                          value: linkView.sourceView.model.get('parametros')[0]
-                        });
+                        }
+                        // por el momento solo se toma el parametro value del objeto externo
+                        // cuando exista una DesignVariable se debe cambiar la logica
+                        elementViewConnected.model.get('inputs')[linkView.model.get('target').port]
+                          .values.push(linkView.sourceView.model.get('parametros')[0]['value']);
+                        
+                        elementViewConnected.model.get('inputs')[linkView.model.get('target').port]
+                          .from.push(auxInput);
+                        // elementViewConnected.model.get('inputs')[linkView.model.get('target').port].push(auxInput);
+                        newLink.target(linkView.model.target());
                       }
-
-                    }
                   }
                 }
+                // cuando el destino es un proceso no es necesario verificar que tenga puertos (por ahora)
+                else if (elementViewConnected.model.attributes.type === 'opm.Process'){
+                  auxInput = {
+                    elementID: linkView.sourceView.model.id,
+                    type: 'externo',
+                    name: linkView.sourceView.model.attr('.label/text'),
 
-
-                if (elementViewConnected.model.attributes.type === 'opm.Process') {
-                  if (linkView.model.get('source').port) {
-                    elementViewConnected.model.get('inputs').push({
-                      type: 'port',
-                      parent: linkView.sourceView.model.id,
-                      name: linkView.model.get('source').port,
-                      id: linkView.sourceView.model.id,
-                      value: 0
-                    });
-                  } else {
-                    elementViewConnected.model.get('inputs').push({
-                      type: 'opm.Object',
-                      parent: null,
-                      name: linkView.sourceView.model.attr('.label/text'),
-                      id: linkView.sourceView.model.id,
-                      value: linkView.sourceView.model.get('parametros')[0]
-                    });
                   }
+                  elementViewConnected.model.get('inputs')
+                    .values.push(linkView.sourceView.model.get('parametros')[0]['value']);
 
+                    elementViewConnected.model.get('inputs')
+                    .from.push(auxInput);
+
+                  
+                  newLink.target(linkView.model.target());
                 }
-
-                // todo: asociar lo necesario en los objetos de inputs y outputs
-                // tanto en objeto como proceso se debe guardar en la coleccion inputs y outputs
-               
-                if (linkView.model.get('source').port) {
-                  newLink.source({id: linkView.sourceView.model.id, port: linkView.model.get('source').port});
-                } else {
-                  newLink.source(linkView.sourceView.model);
-                }
-
-                if (linkView.model.get('target').port) {
-                  newLink.target({id: elementViewConnected.model.id, port: linkView.model.get('target').port});
-                } else {
-                  newLink.target(elementViewConnected.model);
-                }
-
               } else if (linkView.sourceView.model.attributes.staticParams.objectSubtype === 'requirement') {
-                // se asegura que esta relacion sea unicamente con un proceso
-                if (elementViewConnected.model.attributes.type === 'opm.Object') {
-                  alertify.error('no se puede asociar requerimientos entre objetos');
-                  linkView.model.remove();
-                  return;
-                }
-                // formato de link para establecer que se trata de un requerimiento
                 newLink.attr('line/stroke', '#FF2424');
                 newLink.appendLabel({
                   attrs: {
@@ -692,170 +828,39 @@ export class AppComponent implements OnInit, AfterViewInit {
                     }
                   }
                 });
-                newLink.source(linkView.sourceView.model);
-                newLink.target(elementViewConnected.model);
-                if (!elementViewConnected.model.get('reqs')) {
-                  elementViewConnected.model.prop('reqs', []);
-                }
-                elementViewConnected.model.get('reqs').push(linkView.sourceView.model.get('parametros')[0]);
-                  // elementViewConnected.model.get('requirements').push()
-              }
-            }
-            // por el momento para esta condicion solo se aceptara cuando el puerto es output
-            else if (linkView.model.get('source').port) {
-              if (elementViewConnected.model.attributes.type === 'opm.Object') {
-
-                if (!linkView.model.get('target').port) {
-                  alertify.error('el link se debe dirigir a un puerto en el objeto destino');
+                if (elementViewConnected.model.attributes.type === 'opm.Object' || elementViewConnected.model.attributes.type === 'opm.ChildObject') {
+                  alertify.error('no se puede asociar requerimientos con otros objetos');
                   linkView.model.remove();
                   return;
+                } else {
+                  // asociacion de valor de requerimiento a destino
+                  elementViewConnected.model.get('reqs').push(linkView.sourceView.model.get('parametros')[0]);
+                  
+                  newLink.source(linkView.model.source());
+                  newLink.target(linkView.model.target());
                 }
-              }
-              let tempObject = linkView.sourceView.model as shapes.devs.Model;
-              let portID = linkView.model.get('source').port;
-              let sourcePort = tempObject.getGroupPorts('out').filter((pOut) => pOut.id === portID).pop();
-              if (!sourcePort) {
-                alertify.error('el puerto origen debe ser una salida');
+              } else if (linkView.sourceView.model.attributes.staticParams.objectSubtype === '') {
+                console.log('tenemos graves problemas');
+                alertify.error('no se puede realizar la conexion');
                 linkView.model.remove();
                 return;
-
-              } else {
-                tempObject = elementViewConnected.model as shapes.devs.Model;
-                portID = linkView.model.get('target').port;
-                sourcePort = tempObject.getGroupPorts('out').filter((pOut) => pOut.id === portID).pop();
-                if (sourcePort) {
-                  alertify.error('no se pueden asociar outputs con outputs');
-                  linkView.model.remove();
-                  return;
-                }
-                // has algo para asociar el valor de out con el destino
-              }
-
-              newLink.attr('line/stroke', '#62FC6A');
-              newLink.appendLabel({
-                attrs: {
-                  text: {
-                    text: 'in'
-                  }
-                }
-              });
-
-              if (elementViewConnected.model.attributes.type === 'opm.Process') {
-                linkView.sourceView.model.get('outputs')[linkView.model.get('source').port].to.push({
-                  type: 'port',
-                  name: linkView.model.get('target').port,
-                  id: elementViewConnected.model.id,
-                });
-                elementViewConnected.model.get('inputs').push({
-                  type: 'port',
-                  parent: linkView.sourceView.model.id,
-                  name: linkView.model.get('source').port,
-                  id: linkView.sourceView.model.id,
-                  value: 0
-                });
-              } else {
-                linkView.sourceView.model.get('outputs')[linkView.model.get('source').port].to.push({
-                  type: 'port',
-                  name: linkView.model.get('target').port,
-                  id: elementViewConnected.model.id,
-                });
-                elementViewConnected.model.get('inputs')[linkView.model.get('target').port].from.push({
-                  type: 'port',
-                  parent: linkView.sourceView.model.id,
-                  name: linkView.model.get('source').port,
-                  id: linkView.sourceView.model.id,
-                  value: 0
-                });
-              }
-
-              // todo: asociar lo necesario en los objetos de inputs y outputs
-              // tanto en objeto como proceso se debe guardar en la coleccion inputs y outputs
-
-              if (linkView.model.get('source').port) {
-                newLink.source({id: linkView.sourceView.model.id, port: linkView.model.get('source').port});
-              } else {
-                newLink.source(linkView.sourceView.model);
-              }
-
-              if (linkView.model.get('target').port) {
-                newLink.target({id: elementViewConnected.model.id, port: linkView.model.get('target').port});
-              } else {
-                newLink.target(elementViewConnected.model);
               }
             }
+            // si el origen del link es el puerto de un objeto
+
+            
+            
+            
+            
+            
             else {
-              alertify.error('se debe especificar un subtipo o arrastrar desde un puerto');
+              console.log('si llega aqui mi hermano?');
+              alertify.error('no se puede realizar la conexion');
               linkView.model.remove();
               return;
             }
           }
 
-
-
-
-          // principalmente para manejar la conexion de puertos heredados con elementos
-          // internos
-          else if (linkView.sourceView.model.attributes.type === 'opm.ChildObject') {
-            const portID = linkView.model.get('source').port;
-            const tempModel = linkView.sourceView.model as shapes.devs.Model;
-            // se verifica si el puerto forma parte del grupo de entradas
-            const sourcePort = tempModel.getGroupPorts('in').filter((p) => p.id === portID).pop();
-
-            if (!sourcePort) {
-              alertify.error('no es posible realizar esta conexion');
-            } else {
-              newLink.attr('line/stroke', '#62FC6A');
-              newLink.appendLabel({
-                attrs: {
-                  text: {
-                    text: 'in'
-                  }
-                }
-              });
-              if (elementViewConnected.model.attributes.type === 'opm.Process') {
-                elementViewConnected.model.get('inputs').push({
-                  type: 'port',
-                  parent: this.currentID,
-                  name: linkView.model.get('source').port,
-                  id: this.currentID,
-                  value: 0
-                });
-                if (linkView.model.get('source').port) {
-                  newLink.source({id: linkView.sourceView.model.id, port: linkView.model.get('source').port});
-                } else {
-                  newLink.source(linkView.sourceView.model);
-                }
-
-                if (linkView.model.get('target').port) {
-                  newLink.target({id: elementViewConnected.model.id, port: linkView.model.get('target').port});
-                } else {
-                  newLink.target(elementViewConnected.model);
-                }
-              }
-              else if (elementViewConnected.model.attributes.type === 'opm.Object') {
-                if (linkView.model.get('target').port) {
-                  const targetObject = elementViewConnected.model as shapes.devs.Model;
-                  const targetPortID = linkView.model.get('target').port;
-                  const targetPort = targetObject.getGroupPorts('in').filter((pIn) => pIn.id === targetPortID).pop();
-                  if (targetPort) {
-                    newLink.source({id: linkView.sourceView.model.id, port: linkView.model.get('source').port});
-                    newLink.target({id: elementViewConnected.model.id, port: linkView.model.get('target').port});  
-                  } else {
-                    alertify.error('no se puede realizar esta conexion');
-                    linkView.model.remove();
-                    return;
-                  }
-
-                } else {
-                  alertify.error('la conexion con objetos debe ser de puerto heredado a puerto de objeto');
-                  linkView.model.remove();
-                  return;
-                }
-              }
-            }
-          }
-          // principalmente para manejar salidas de proceso y su distribucion ya sea
-          // como entrada a otros procesos, objetos, o puertos heredados de un elemento padre
           else if (linkView.sourceView.model.attributes.type === 'opm.Process') {
             newLink.attr('line/stroke', '#4FC8FE');
             newLink.appendLabel({
@@ -865,57 +870,185 @@ export class AppComponent implements OnInit, AfterViewInit {
                 }
               }
             });
-            const targetObject = elementViewConnected.model as shapes.devs.Model;
-            let targetPortID;
-            let targetPort;
-            if (elementViewConnected.model.attributes.type === 'opm.Object') {
+            // conexion de proceso con proceso
+            if (elementViewConnected.model.attributes.type === 'opm.Process') {
+              auxOutput = {
+                elementID: elementViewConnected.model.id,
+                parent: this.currentID,
+                type: elementViewConnected.model.attributes.type,
+                name: elementViewConnected.model.attr('.label/text')
+              }
 
+              linkView.sourceView.model.get('outputs').to.push(auxOutput);
+
+              auxInput = {
+                elementID: linkView.sourceView.model.id,
+                name: linkView.sourceView.model.attr('.label/text'),
+                type: linkView.sourceView.model.attributes.type,
+              };
+
+              elementViewConnected.model.get('inputs').from.push(auxInput);
+
+
+              newLink.source(linkView.model.source());
+              newLink.target(linkView.model.target());
+            } else if (elementViewConnected.model.attributes.type === 'opm.Object' ||
+                      elementViewConnected.model.attributes.type === 'opm.ChildObject'
+            ) {
               if (!linkView.model.get('target').port) {
-                alertify.error('la conexion con un objeto debe er a traves de un puerto');
+                alertify.error('la salida debe dirigirse a un puerto de entrada');
                 linkView.model.remove();
                 return;
-              } else {
-                targetPortID = linkView.model.get('target').port;
-                targetPort = targetObject.getGroupPorts('in').filter((pIn) => pIn.id === targetPortID).pop();
-                if (!targetPort) {
-                  alertify.error('el puerto debe ser de entrada');
+              } else if (this.portBelongsToGroup(
+                elementViewConnected.model as shapes.devs.Model,
+                linkView.model.get('target').port,
+                'in'
+              )) {
+                if (elementViewConnected.model.attributes.type === 'opm.Object'){
+                  // la salida del proceso se dirige al puerto de entrada de un objeto normal
+
+                  auxOutput = {
+                    elementID: elementViewConnected.model.id,
+                    type: elementViewConnected.model.attributes.type,
+                    name: elementViewConnected.model.attr('.label/text'),
+                    port: linkView.model.get('target').port,
+                  };
+
+                  linkView.sourceView.model.get('outputs').to.push(auxOutput);
+
+                  auxInput = {
+                    elementID: linkView.sourceView.model.id,
+                    type: linkView.sourceView.model.attributes.type,
+                    port: linkView.model.get('source').port,
+                    name: linkView.sourceView.model.attr('.label/text'),
+                  };
+
+                  elementViewConnected.model.get('inputs')[linkView.model.get('target').port]
+                    .from.push(auxInput);
+
+                  
+                  newLink.source(linkView.model.source());
+                  newLink.target(linkView.model.target());
+                } else {
+                  alertify.error('no se puede dirigir a la entrada de un ChildObject');
                   linkView.model.remove();
                   return;
+                }
+              } else {
+                if (elementViewConnected.model.attributes.type === 'opm.ChildObject') {
+                  // la salida del proceso se dirige al puerto de salida de un ChildObject
+
+                  auxOutput = {
+                    elementID: this.currentID,
+                    type: elementViewConnected.model.attributes.type,
+                    port: linkView.model.get('target').port,
+                    name: elementViewConnected.model.attr('.label/text'),
+                  };
+
+                  linkView.sourceView.model.get('outputs').to.push(auxOutput);
+
+                  auxInput = {
+                    elementID: linkView.sourceView.model.id,
+                    type: linkView.sourceView.model.attributes.type,
+                    name: linkView.sourceView.model.attr('.label/text'),
+                    port: linkView.model.get('source').port,
+                  };
+
+                  elementViewConnected.model.get('outputs')[linkView.model.get('target').port]
+                    .from.push(auxInput);
+
+
+
+                  newLink.source(linkView.model.source());
+                  newLink.target(linkView.model.target());
                 } else {
-                  // se establece el objetivo del link
-                  newLink.target({id: elementViewConnected.model.id, port: linkView.model.get('target').port});
+                  alertify.error('este tipo de conexion solo se puede hacer con childObjects');
+                  linkView.model.remove();
+                  return;
                 }
               }
-            } else if (elementViewConnected.model.attributes.type === 'opm.ChildObject') {
-              targetPortID = linkView.model.get('target').port;
-              targetPort = targetObject.getGroupPorts('out').filter((pOut) => pOut.id === targetPortID).pop();
-              if (!targetPort) {
-                alertify.error('en objetos hijo solo se debe dirigir a salidas');
-                linkView.model.remove();
-                return;
-              } else {
-                linkView.sourceView.model.get('outputs').push({
-                  type: 'opm.Process',
-                  parent: this.currentID,
-                  name: elementViewConnected.model.attr('.label/text'),
-                  id: elementViewConnected.model.id,
-                });
-                newLink.target({id: elementViewConnected.model.id, port: linkView.model.get('target').port});
+            }
+          }
+          else if (linkView.sourceView.model.attributes.type === 'opm.ChildObject') {
+
+            newLink.attr('line/stroke', '#62FC6A');
+            newLink.appendLabel({
+              attrs: {
+                text: {
+                  text: 'in'
+                }
               }
+            });
+            if (this.portBelongsToGroup(
+              linkView.sourceView.model as shapes.devs.Model,
+              linkView.model.get('source').port,
+              'in'
+            )) {
+              if (elementViewConnected.model.attributes.type === 'opm.Process') {
 
-            } else if (elementViewConnected.model.attributes.type === 'opm.Process') {
-              newLink.target(elementViewConnected.model);
-            }
+                auxOutput = {
+                  elementID: elementViewConnected.model.id,
+                  parent: this.currentID,
+                  type: elementViewConnected.model.attributes.type,
+                  name: elementViewConnected.model.attr('.label/text'),
+                };
+
+                linkView.sourceView.model.get('inputs')[linkView.model.get('source').port]
+                  .to.push(auxOutput);
+
+                auxInput = {
+                  elementID: this.currentID,
+                  type: linkView.sourceView.model.attributes.type,
+                  name: linkView.sourceView.model.attr('.label/text'),
+                  port: linkView.model.get('source').port,
+                }
+
+                elementViewConnected.model.get('inputs').from.push(auxInput);
 
 
+                newLink.source(linkView.model.source());
+                newLink.target(linkView.model.target());
+              } else if (elementViewConnected.model.attributes.type === 'opm.Object') {
+                if (this.portBelongsToGroup(
+                  elementViewConnected.model as shapes.devs.Model,
+                  linkView.model.get('target').port,
+                  'in'
+                )) {
 
+                  auxOutput = {
+                    elementID: elementViewConnected.model.id,
+                    type: elementViewConnected.model.attributes.type,
+                    name: elementViewConnected.model.attr('.label/text'),
+                    port: linkView.model.get('target').port,
+                  };
+  
+                  linkView.sourceView.model.get('inputs')[linkView.model.get('source').port]
+                    .to.push(auxOutput);
+  
+                  auxInput = {
+                    elementID: this.currentID,
+                    type: linkView.sourceView.model.attributes.type,
+                    name: linkView.sourceView.model.attr('.label/text'),
+                    port: linkView.model.get('source').port,
+                  }
+  
+                  elementViewConnected.model.get('inputs')[linkView.model.get('target').port]
+                    .from.push(auxInput);
+  
 
-            if (linkView.model.get('source').port) {
-              newLink.source({id: linkView.sourceView.model.id, port: linkView.model.get('source').port});
+                  newLink.source(linkView.model.source());
+                  newLink.target(linkView.model.target());
+                } else {
+                  alertify.error('la conexion debe dirigirse solo a puertos de entrada');
+                  linkView.model.remove();
+                  return;
+                }
+              }
             } else {
-              newLink.source(linkView.sourceView.model);
+              alertify.error('en objetos inzoomed el origen debe ser un puerto de entrada');
+              linkView.model.remove();
+              return;
             }
-
           }
           this.currentGraph.addCell(newLink);
           linkView.model.remove();
@@ -1075,7 +1208,7 @@ export class AppComponent implements OnInit, AfterViewInit {
               const figura = new opm.Process();
               if (celdas.length === 1) {
                 const tmpModel = celdas[0] as shapes.devs.Model;
-                tmpModel.prop('algo', {});
+                
 
                 tmpModel.position(imgPosition.x, imgPosition.y);
               }
@@ -1120,15 +1253,21 @@ export class AppComponent implements OnInit, AfterViewInit {
       else if (opt.stencil && cell.attributes.type === 'opm.Process') {
         cell.attributes.size.height = 80;
         cell.attributes.size.width = 150;
-        cell.prop('inputs', []);
-        cell.prop('outputs', []);
+        cell.prop('reqs', []);
+        cell.prop('inputs', {});
+        cell.prop('inputs/values', []);
+        cell.prop('inputs/from', []);
+        cell.prop('outputs', {});
+        cell.prop('outputs/values', []);
+        cell.prop('outputs/to', []);
+        cell.prop('parentID', this.currentID);
       }
     });
 
     this.currentGraph.on('remove', (cell, collection, opt) => {
       if (cell.isLink()) {
         if (cell.attributes.type !== 'opm.tempLink') {
-          console.log('link eliminado');
+          // todo: borrar referencias de inouts en origen y destino
           console.log(this.currentGraph.getCell(cell.attributes.source));
           console.log(this.currentGraph.getCell(cell.attributes.target));
           
@@ -1145,14 +1284,13 @@ export class AppComponent implements OnInit, AfterViewInit {
         { type: 'zoomOut', name: 'zoomOut', },
         { type: 'zoomToFit', name: 'fit' },
         { type: 'separator' },
-        // { type: 'button', name: 'nuevo', text: 'new Diagram' },
         { type: 'button', name: 'save_server', text: 'Save to Server' },
         { type: 'button', name: 'load', text: 'Load Diagram' },
         { type: 'button', name: 'save', text: 'Save' },
         { type: 'button', name: 'clear', text: 'Clear' },
         { type: 'separator' },
         { type: 'button', name: 'connect', text: 'connect' },
-        { type: 'button', name: 'print_tree', text: 'tree' }
+        // { type: 'button', name: 'print_tree', text: 'tree' }
       ],
       // se utilizan las referencias para que los botones tengan interaccion con
       // el lienzo u otros elementos
@@ -1161,10 +1299,10 @@ export class AppComponent implements OnInit, AfterViewInit {
       }
     });
 
-    toolbar.on('print_tree:pointerclick', (evt) => {
-      console.log(this.OPDTree);
-      console.log(this.currentGraph);
-    });
+    // toolbar.on('print_tree:pointerclick', (evt) => {
+    //   console.log(this.OPDTree);
+    //   console.log(this.currentGraph);
+    // });
 
 
 
@@ -1182,7 +1320,7 @@ export class AppComponent implements OnInit, AfterViewInit {
     // evento que escucha cuanco se presiona el boton save_server de la barra de herramientas
     toolbar.on('save_server:pointerclick', (evt) => {
 
-      //
+
       this.openSaveDialog(paper, stencilDB);
     });
 
@@ -1289,12 +1427,38 @@ export class AppComponent implements OnInit, AfterViewInit {
       // se actualiza contenido de nodo atual
       const nodo = this.searchNode(this.OPDTree, this.currentID);
       nodo.jsonGraph = this.currentGraph.toJSON();
-      // this.mongo.connectToMatlab(this.OPDTree);
       this.mongo.connectToMatlab(this.OPDTree).subscribe((data) => {
+        let resultString:string = "";
+        resultString = `
+        <table>
+          <tr>
+            <th>origen</th>
+            <th>resultado</th>
+          </tr>
+        `;
+        for(const llave of Object.keys(data)) {
+          resultString += '<tr>';
+          resultString += '<td>'+llave + '</td><td>'+ (Math.round(data[llave]*100)/100).toFixed(2) + '</td>';
+          resultString += '</tr>';
+        }
+
+        Swal.fire({
+          title:'Resultados',
+          html: resultString,
+          confirmButtonText: 'Salir'
+        });
         console.log('response:');
         console.log(data);
-      }, (err) => {
-        alertify.error('No se pudo establecer conexion con el servidor');
+      }, (err: HttpErrorResponse) => {
+        if(err.status === 500) {
+          alertify.error('Error en el servidor');
+        } else if(err.status === 0) {
+          alertify.error('No se pudo establecer conexion con el servidor');
+        } else if(err.status === 503) {
+          alertify.error('servidor matlab no disponible');
+        }
+        console.error(err);
+        
       });
     });
 
@@ -1312,7 +1476,7 @@ export class AppComponent implements OnInit, AfterViewInit {
 
 
     // evento para crear un inspector cada que se hace click en algun elemento del diagrama
-    paper.on('element:pointerclick', (elementView) => {
+    paper.on('element:pointerclick', (elementView: dia.ElementView) => {
       // se verifica si ya existe una instancia global de un inspector
       // de ser asi se elimina
       if (this.globalInspector) {
