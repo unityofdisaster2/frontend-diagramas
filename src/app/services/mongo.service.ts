@@ -49,9 +49,9 @@ export class MongoService {
 
   constructor(private http: HttpClient) { }
 
-
+  private baseURL = 'http://localhost:3000';
   getRegistros() {
-    const url = 'http://localhost:3000/api/registros';
+    const url = `${this.baseURL}/api/registros`;
     return this.http.get(url,
       {
         headers: new HttpHeaders({
@@ -61,7 +61,7 @@ export class MongoService {
   }
 
   insertGraph(grafo: OPDNode[], image: any, group: string, name: string) {
-    const url = 'http://localhost:3000/api/insertGraph';
+    const url = `${this.baseURL}/api/insertGraph`;
     const auxJson = {
       grafo,
       image,
@@ -73,7 +73,7 @@ export class MongoService {
   }
 
   connectToMatlab(estructura: any) {
-    const url = 'http://localhost:3000/api/tcpMessage';
+    const url = `${this.baseURL}/api/tcpMessage`;
     let arreglo = null;
     arreglo = new Array<any>();
     this.filterTree(estructura, arreglo);
