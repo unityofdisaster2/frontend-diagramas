@@ -203,7 +203,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       // se carga el grafo del nodo seleccionado
       this.currentGraph.clear();
       this.currentGraph.fromJSON(nodo.jsonGraph);
-      
+
       this.currentID = $event.id;
       // se actualizan los puertos del nodo padre 
       this.updateParentPorts(this.currentGraph);
@@ -503,7 +503,7 @@ export class AppComponent implements OnInit, AfterViewInit {
           }
           elementView.model.prop('isParent', true);
           nodoActual.jsonGraph = this.currentGraph.toJSON();
-          
+
           // se crea nodo hijo con los valores del objeto seleccionado
           nodoActual.children.push({
             // se selecciona el nombre del objeto
@@ -563,9 +563,11 @@ export class AppComponent implements OnInit, AfterViewInit {
           arreglo.splice(0, 0, padre);
           // arreglo.reverse();
           // this.currentGraph.addCell(padre);
-          const tempGraph = new dia.Graph({}, {cellNamespace: {
-            opm, shapes
-          }});
+          const tempGraph = new dia.Graph({}, {
+            cellNamespace: {
+              opm, shapes
+            }
+          });
           tempGraph.addCells(arreglo);
           // this.currentGraph.clear();
           // por alguna razon si se hace directo el addcells sobre currentGraph
@@ -600,8 +602,8 @@ export class AppComponent implements OnInit, AfterViewInit {
 
           // se crea nuevo link para sustituir al que se crea de manera inicial
           let newLink = new opm.ResultConsumptionLink()
-          .router('metro')
-          .connector('jumpover');
+            .router('metro')
+            .connector('jumpover');
           let auxInput: InOutStructure;
           let auxOutput: InOutStructure;
           // condicion utilizada cuando el origen es del tipo objeto
@@ -627,132 +629,132 @@ export class AppComponent implements OnInit, AfterViewInit {
                 linkView.sourceView.model as shapes.devs.Model,
                 linkView.model.get('source').port,
                 'out'
-                )) {
-                  
-                  newLink.source(linkView.model.source());
-                  // se checa el caso donde el destino es objeto
-                  if (elementViewConnected.model.attributes.type === 'opm.Object' ||
+              )) {
+
+                newLink.source(linkView.model.source());
+                // se checa el caso donde el destino es objeto
+                if (elementViewConnected.model.attributes.type === 'opm.Object' ||
                   elementViewConnected.model.attributes.type === 'opm.ChildObject'
-                  ) {
-                    
-                    // se verifica que el objeto destino tenga puerto
-                    if (!linkView.model.get('target').port) {
-                      alertify.error('la conexion solo se puede dirigir hacia un puerto de entrada del objeto');
-                      linkView.model.remove();
-                      return;
+                ) {
+
+                  // se verifica que el objeto destino tenga puerto
+                  if (!linkView.model.get('target').port) {
+                    alertify.error('la conexion solo se puede dirigir hacia un puerto de entrada del objeto');
+                    linkView.model.remove();
+                    return;
+                  } else {
+                    // se verifica que el puerto destino sea una entrada
+                    if (this.portBelongsToGroup(
+                      elementViewConnected.model as shapes.devs.Model,
+                      linkView.model.get('target').port,
+                      'in')) {
+                      // se checan dos casos, si el destino es objeto el link se debe dirigir
+                      // hacia una entrada, si el destino es ChildObject el unico destino debe
+                      // ser un puerto de salida
+                      if (elementViewConnected.model.attributes.type === 'opm.Object') {
+                        auxInput = {
+                          elementID: linkView.sourceView.model.id,
+                          type: linkView.sourceView.model.attributes.type,
+                          port: linkView.model.get('source').port,
+                          name: linkView.sourceView.model.attr('.label/text')
+                        };
+                        elementViewConnected.model.get('inputs')[linkView.model.get('target').port]
+                          .from.push(auxInput);
+
+                        // elementViewConnected.model.get('inputs')[linkView.model.get('target').port].push(auxInput);
+
+
+                        auxOutput = {
+                          elementID: elementViewConnected.model.id,
+                          type: elementViewConnected.model.attributes.type,
+                          port: linkView.model.get('target').port,
+                          name: elementViewConnected.model.attr('.label/text')
+                        };
+
+                        linkView.sourceView.model.get('outputs')[linkView.model.get('source').port]
+                          .to.push(auxOutput);
+                        // linkView.sourceView.model.get('outputs')[linkView.model.get('source').port].push(auxOutput);
+
+
+                        newLink.target(linkView.model.target());
+                      } else {
+
+                        alertify.error('no se puede realizar la conexion');
+                        linkView.model.remove();
+                        return;
+                      }
+
                     } else {
-                      // se verifica que el puerto destino sea una entrada
-                      if (this.portBelongsToGroup(
-                        elementViewConnected.model as shapes.devs.Model,
-                        linkView.model.get('target').port,
-                        'in')) {
-                          // se checan dos casos, si el destino es objeto el link se debe dirigir
-                          // hacia una entrada, si el destino es ChildObject el unico destino debe
-                          // ser un puerto de salida
-                          if (elementViewConnected.model.attributes.type === 'opm.Object') {
-                            auxInput = {
-                              elementID: linkView.sourceView.model.id,
-                              type: linkView.sourceView.model.attributes.type,
-                              port: linkView.model.get('source').port,
-                              name: linkView.sourceView.model.attr('.label/text')
-                            };
-                            elementViewConnected.model.get('inputs')[linkView.model.get('target').port]
-                              .from.push(auxInput);
+                      if (elementViewConnected.model.attributes.type === 'opm.ChildObject') {
+                        auxOutput = {
+                          // referencia al ID del padre
+                          elementID: this.currentID,
+                          type: elementViewConnected.model.attributes.type,
+                          port: linkView.model.get('target').port,
+                          name: elementViewConnected.model.attr('.label/text'),
+                        };
 
-                            // elementViewConnected.model.get('inputs')[linkView.model.get('target').port].push(auxInput);
+                        linkView.sourceView.model.get('outputs')[linkView.model.get('source').port]
+                          .to.push(auxOutput);
+
+                        // linkView.sourceView.model.get('outputs')[linkView.model.get('source').port].push(auxOutput);
 
 
-                            auxOutput = {
-                              elementID: elementViewConnected.model.id,
-                              type: elementViewConnected.model.attributes.type,
-                              port: linkView.model.get('target').port,
-                              name: elementViewConnected.model.attr('.label/text')
-                            };
+                        // aqui deberia ir el input,
+                        auxInput = {
+                          elementID: linkView.sourceView.model.id,
+                          type: linkView.sourceView.model.attributes.type,
+                          port: linkView.model.get('source').port,
+                          name: linkView.sourceView.model.attr('.label/text')
+                        };
+                        // aunque se dirige a un puerto output se guarda la referencia en el objeto inputs
 
-                            linkView.sourceView.model.get('outputs')[linkView.model.get('source').port]
-                              .to.push(auxOutput);
-                            // linkView.sourceView.model.get('outputs')[linkView.model.get('source').port].push(auxOutput);
-
-
-                            newLink.target(linkView.model.target());
-                          } else {
-
-                            alertify.error('no se puede realizar la conexion');
-                            linkView.model.remove();
-                            return;
-                          }
-                          
-                        } else {
-                          if (elementViewConnected.model.attributes.type === 'opm.ChildObject') {
-                            auxOutput = {
-                              // referencia al ID del padre
-                              elementID: this.currentID,
-                              type: elementViewConnected.model.attributes.type,
-                              port: linkView.model.get('target').port,
-                              name: elementViewConnected.model.attr('.label/text'),
-                            };
-
-                            linkView.sourceView.model.get('outputs')[linkView.model.get('source').port]
-                              .to.push(auxOutput);
-
-                            // linkView.sourceView.model.get('outputs')[linkView.model.get('source').port].push(auxOutput);
-
-
-                            // aqui deberia ir el input,
-                            auxInput = {
-                              elementID: linkView.sourceView.model.id,
-                              type: linkView.sourceView.model.attributes.type,
-                              port: linkView.model.get('source').port,
-                              name: linkView.sourceView.model.attr('.label/text')
-                            };
-                            // aunque se dirige a un puerto output se guarda la referencia en el objeto inputs
-
-                            elementViewConnected.model.get('outputs')[linkView.model.get('target').port]
-                              .from.push(auxInput);
-                            // elementViewConnected.model.get('inputs')[linkView.model.get('target').port].push(cloneDeep(auxInput));
+                        elementViewConnected.model.get('outputs')[linkView.model.get('target').port]
+                          .from.push(auxInput);
+                        // elementViewConnected.model.get('inputs')[linkView.model.get('target').port].push(cloneDeep(auxInput));
 
 
 
-                            newLink.target(linkView.model.target());
-                          } else {
-                            alertify.error('el puerto destino debe ser de entrada');
-                            linkView.model.remove();
-                            return;
-                          }
-
-                        }
-                    }
-                  } else if (elementViewConnected.model.attributes.type === 'opm.Process') {
-                    // recuerda va de el puerto de un objeto al input de in proceso
-
-                    auxInput = {
-                      elementID: linkView.sourceView.model.id,
-                      port: linkView.model.get('source').port,
-                      type: linkView.sourceView.model.attributes.type,
-                      name: linkView.sourceView.model.attr('.label/text')
-                    };
-                    elementViewConnected.model.get('inputs').from.push(auxInput);
-
-                    auxOutput = {
-                      elementID: elementViewConnected.model.id,
-                      parent: this.currentID,
-                      type: elementViewConnected.model.attributes.type,
-                      name: elementViewConnected.model.attr('.label/text')
+                        newLink.target(linkView.model.target());
+                      } else {
+                        alertify.error('el puerto destino debe ser de entrada');
+                        linkView.model.remove();
+                        return;
+                      }
 
                     }
-                    linkView.sourceView.model.get('outputs')[linkView.model.get('source').port]
-                      .to.push(auxOutput);
-
-                    newLink.target(linkView.model.target());
                   }
+                } else if (elementViewConnected.model.attributes.type === 'opm.Process') {
+                  // recuerda va de el puerto de un objeto al input de in proceso
 
-                } else {
-                  alertify.error('el origen debe ser un puerto salida');
-                  linkView.model.remove();
-                  return;
+                  auxInput = {
+                    elementID: linkView.sourceView.model.id,
+                    port: linkView.model.get('source').port,
+                    type: linkView.sourceView.model.attributes.type,
+                    name: linkView.sourceView.model.attr('.label/text')
+                  };
+                  elementViewConnected.model.get('inputs').from.push(auxInput);
+
+                  auxOutput = {
+                    elementID: elementViewConnected.model.id,
+                    parent: this.currentID,
+                    type: elementViewConnected.model.attributes.type,
+                    name: elementViewConnected.model.attr('.label/text')
+
+                  }
+                  linkView.sourceView.model.get('outputs')[linkView.model.get('source').port]
+                    .to.push(auxOutput);
+
+                  newLink.target(linkView.model.target());
                 }
 
-            } 
+              } else {
+                alertify.error('el origen debe ser un puerto salida');
+                linkView.model.remove();
+                return;
+              }
+
+            }
 
             else if (linkView.sourceView.model.attributes.staticParams) {
               if (linkView.sourceView.model.attributes.staticParams.objectSubtype === 'externo') {
@@ -779,31 +781,31 @@ export class AppComponent implements OnInit, AfterViewInit {
                       elementViewConnected.model as shapes.devs.Model,
                       linkView.model.get('target').port,
                       'out')) {
-                        alertify.error('no se puede asociar elemento externo con puerto de salida');
-                        linkView.model.remove();
-                        return;
-                      } else {
-                        // conexion exitosa de objeto externo con puerto de otro objeto
-                        
-                        auxInput = {
-                          elementID: linkView.sourceView.model.id,
-                          type: 'externo',
-                          name: linkView.sourceView.model.attr('.label/text'),
-                        }
-                        // por el momento solo se toma el parametro value del objeto externo
-                        // cuando exista una DesignVariable se debe cambiar la logica
-                        elementViewConnected.model.get('inputs')[linkView.model.get('target').port]
-                          .values.push(linkView.sourceView.model.get('parametros')[0]['value']);
-                        
-                        elementViewConnected.model.get('inputs')[linkView.model.get('target').port]
-                          .from.push(auxInput);
-                        // elementViewConnected.model.get('inputs')[linkView.model.get('target').port].push(auxInput);
-                        newLink.target(linkView.model.target());
+                      alertify.error('no se puede asociar elemento externo con puerto de salida');
+                      linkView.model.remove();
+                      return;
+                    } else {
+                      // conexion exitosa de objeto externo con puerto de otro objeto
+
+                      auxInput = {
+                        elementID: linkView.sourceView.model.id,
+                        type: 'externo',
+                        name: linkView.sourceView.model.attr('.label/text'),
                       }
+                      // por el momento solo se toma el parametro value del objeto externo
+                      // cuando exista una DesignVariable se debe cambiar la logica
+                      elementViewConnected.model.get('inputs')[linkView.model.get('target').port]
+                        .values.push(linkView.sourceView.model.get('parametros')[0]['value']);
+
+                      elementViewConnected.model.get('inputs')[linkView.model.get('target').port]
+                        .from.push(auxInput);
+                      // elementViewConnected.model.get('inputs')[linkView.model.get('target').port].push(auxInput);
+                      newLink.target(linkView.model.target());
+                    }
                   }
                 }
                 // cuando el destino es un proceso no es necesario verificar que tenga puertos (por ahora)
-                else if (elementViewConnected.model.attributes.type === 'opm.Process'){
+                else if (elementViewConnected.model.attributes.type === 'opm.Process') {
                   auxInput = {
                     elementID: linkView.sourceView.model.id,
                     type: 'externo',
@@ -813,10 +815,10 @@ export class AppComponent implements OnInit, AfterViewInit {
                   elementViewConnected.model.get('inputs')
                     .values.push(linkView.sourceView.model.get('parametros')[0]['value']);
 
-                    elementViewConnected.model.get('inputs')
+                  elementViewConnected.model.get('inputs')
                     .from.push(auxInput);
 
-                  
+
                   newLink.target(linkView.model.target());
                 }
               } else if (linkView.sourceView.model.attributes.staticParams.objectSubtype === 'requirement') {
@@ -835,7 +837,7 @@ export class AppComponent implements OnInit, AfterViewInit {
                 } else {
                   // asociacion de valor de requerimiento a destino
                   elementViewConnected.model.get('reqs').push(linkView.sourceView.model.get('parametros')[0]);
-                  
+
                   newLink.source(linkView.model.source());
                   newLink.target(linkView.model.target());
                 }
@@ -848,11 +850,11 @@ export class AppComponent implements OnInit, AfterViewInit {
             }
             // si el origen del link es el puerto de un objeto
 
-            
-            
-            
-            
-            
+
+
+
+
+
             else {
               console.log('si llega aqui mi hermano?');
               alertify.error('no se puede realizar la conexion');
@@ -893,7 +895,7 @@ export class AppComponent implements OnInit, AfterViewInit {
               newLink.source(linkView.model.source());
               newLink.target(linkView.model.target());
             } else if (elementViewConnected.model.attributes.type === 'opm.Object' ||
-                      elementViewConnected.model.attributes.type === 'opm.ChildObject'
+              elementViewConnected.model.attributes.type === 'opm.ChildObject'
             ) {
               if (!linkView.model.get('target').port) {
                 alertify.error('la salida debe dirigirse a un puerto de entrada');
@@ -904,7 +906,7 @@ export class AppComponent implements OnInit, AfterViewInit {
                 linkView.model.get('target').port,
                 'in'
               )) {
-                if (elementViewConnected.model.attributes.type === 'opm.Object'){
+                if (elementViewConnected.model.attributes.type === 'opm.Object') {
                   // la salida del proceso se dirige al puerto de entrada de un objeto normal
 
                   auxOutput = {
@@ -926,7 +928,7 @@ export class AppComponent implements OnInit, AfterViewInit {
                   elementViewConnected.model.get('inputs')[linkView.model.get('target').port]
                     .from.push(auxInput);
 
-                  
+
                   newLink.source(linkView.model.source());
                   newLink.target(linkView.model.target());
                 } else {
@@ -1021,20 +1023,20 @@ export class AppComponent implements OnInit, AfterViewInit {
                     name: elementViewConnected.model.attr('.label/text'),
                     port: linkView.model.get('target').port,
                   };
-  
+
                   linkView.sourceView.model.get('inputs')[linkView.model.get('source').port]
                     .to.push(auxOutput);
-  
+
                   auxInput = {
                     elementID: this.currentID,
                     type: linkView.sourceView.model.attributes.type,
                     name: linkView.sourceView.model.attr('.label/text'),
                     port: linkView.model.get('source').port,
                   }
-  
+
                   elementViewConnected.model.get('inputs')[linkView.model.get('target').port]
                     .from.push(auxInput);
-  
+
 
                   newLink.source(linkView.model.source());
                   newLink.target(linkView.model.target());
@@ -1184,7 +1186,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         // dado que la imagen solo se usa como referencia para mostrar una vista previa
         // del verdadero modelo, se elimina del diagrama actual
         this.currentGraph.removeCells([cell]);
-        
+
         for (const element of this.objectMaps) {
           if (cell.attributes.prop.mongoID === element._id) {
 
@@ -1208,7 +1210,7 @@ export class AppComponent implements OnInit, AfterViewInit {
               const figura = new opm.Process();
               if (celdas.length === 1) {
                 const tmpModel = celdas[0] as shapes.devs.Model;
-                
+
 
                 tmpModel.position(imgPosition.x, imgPosition.y);
               }
@@ -1270,7 +1272,7 @@ export class AppComponent implements OnInit, AfterViewInit {
           // todo: borrar referencias de inouts en origen y destino
           console.log(this.currentGraph.getCell(cell.attributes.source));
           console.log(this.currentGraph.getCell(cell.attributes.target));
-          
+
         }
       }
     });
@@ -1290,7 +1292,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         { type: 'button', name: 'clear', text: 'Clear' },
         { type: 'separator' },
         { type: 'button', name: 'connect', text: 'connect' },
-        // { type: 'button', name: 'print_tree', text: 'tree' }
+        { type: 'button', name: 'print_tree', text: 'tree' }
       ],
       // se utilizan las referencias para que los botones tengan interaccion con
       // el lienzo u otros elementos
@@ -1299,10 +1301,11 @@ export class AppComponent implements OnInit, AfterViewInit {
       }
     });
 
-    // toolbar.on('print_tree:pointerclick', (evt) => {
-    //   console.log(this.OPDTree);
-    //   console.log(this.currentGraph);
-    // });
+    toolbar.on('print_tree:pointerclick', (evt) => {
+      console.log(this.OPDTree);
+      console.log(this.currentGraph);
+      console.log(this.currentGraph.toJSON());
+    });
 
 
 
@@ -1428,7 +1431,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       const nodo = this.searchNode(this.OPDTree, this.currentID);
       nodo.jsonGraph = this.currentGraph.toJSON();
       this.mongo.connectToMatlab(this.OPDTree).subscribe((data) => {
-        let resultString:string = "";
+        let resultString: string = "";
         resultString = `
         <table>
           <tr>
@@ -1436,29 +1439,29 @@ export class AppComponent implements OnInit, AfterViewInit {
             <th>resultado</th>
           </tr>
         `;
-        for(const llave of Object.keys(data)) {
+        for (const llave of Object.keys(data)) {
           resultString += '<tr>';
-          resultString += '<td>'+llave + '</td><td>'+ (Math.round(data[llave]*100)/100).toFixed(2) + '</td>';
+          resultString += '<td>' + llave + '</td><td>' + (Math.round(data[llave] * 100) / 100).toFixed(2) + '</td>';
           resultString += '</tr>';
         }
 
         Swal.fire({
-          title:'Resultados',
+          title: 'Resultados',
           html: resultString,
           confirmButtonText: 'Salir'
         });
         console.log('response:');
         console.log(data);
       }, (err: HttpErrorResponse) => {
-        if(err.status === 500) {
+        if (err.status === 500) {
           alertify.error('Error en el servidor');
-        } else if(err.status === 0) {
+        } else if (err.status === 0) {
           alertify.error('No se pudo establecer conexion con el servidor');
-        } else if(err.status === 503) {
+        } else if (err.status === 503) {
           alertify.error('servidor matlab no disponible');
         }
         console.error(err);
-        
+
       });
     });
 

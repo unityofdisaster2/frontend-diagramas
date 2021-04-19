@@ -18,7 +18,6 @@ export class StencilService {
       groupsToggleButtons: true,
       groups: {
         OPM: { index: 1, label: 'OPM shapes', height: 300 },
-
       },
       layout: {
         columnWidth: 150,
